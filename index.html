@@ -32,7 +32,9 @@ button{font:600 15px var(--body);cursor:pointer}
 .pal button[aria-pressed=true]{border-color:var(--ink)}
 .pal button:disabled{opacity:.35;cursor:not-allowed}
 .top{padding:14px 16px 10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
-.title{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.title{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.acts{display:flex;gap:6px}
+.wa{display:flex;align-items:center;gap:5px;background:#25d366;color:#fff;border-radius:10px;padding:5px 10px;font:600 13px var(--body);text-decoration:none}
 .title b{font-family:var(--display);font-size:20px}
 .who{display:flex;gap:6px;flex-wrap:wrap}
 .chip{font:500 13px var(--body);border:2px solid var(--c);border-radius:99px;padding:3px 10px;display:flex;align-items:center;gap:6px}
@@ -146,10 +148,11 @@ async function enterRoom(){
 const W=id=>S.writers.find(w=>w.id===id)||{name:"?",color:"#999"};
 
 function renderRoom(){
-  $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><button class="share" id="sh">Deel link</button></div><div class="who" id="who"></div></div>
+  $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><div class="acts"><a class="wa" id="wa" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.2A8.5 8.5 0 1 1 21 11.5z"/></svg>WhatsApp</a><button class="share" id="sh">Deel link</button></div></div><div class="who" id="who"></div></div>
   <div class="memos"><div class="lbl"><span>Memo's</span></div><div class="empty">Opnemen en een melodie kiezen komt in de volgende stap (fase 3).</div></div>
   <div class="sheet" id="sheet"></div><div class="split" id="split"></div>`;
   $("#sh").onclick=async()=>{const u=location.href;const t="Doe mee aan onze schrijfsessie: "+S.session.title;if(navigator.share){try{await navigator.share({title:t,text:t,url:u});return}catch(e){if(e&&e.name==="AbortError")return}}try{await navigator.clipboard.writeText(u);toast("Link gekopieerd. Plak hem in WhatsApp.")}catch(e){prompt("Kopieer deze link",u)}};
+  $("#wa").href="https://wa.me/?text="+encodeURIComponent("Doe mee aan onze schrijfsessie: "+S.session.title+"\n"+location.href);
   renderWho();renderSheet();renderSplit();
 }
 function renderWho(){const el=$("#who");if(!el)return;el.innerHTML=S.writers.map(w=>`<span class="chip ${S.online.has(w.id)?"on":""}" style="--c:${w.color}" title="${S.online.has(w.id)?"nu verbonden":"niet verbonden"}"><i></i>${esc(w.name)}${w.id===S.me.id?" (jij)":""}</span>`).join("")}
