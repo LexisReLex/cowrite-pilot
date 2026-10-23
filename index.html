@@ -127,19 +127,24 @@ async function loadMemos(){const {data}=await sb.from("memos").select("*").eq("s
 
 function renderStart(msg){
   $("#app").innerHTML=`<div class="pad stack">
-    <span class="mono">ShareNotes · pilot</span>
+    <span class="mono">ShareNotes · pilot · gemaakt door Lex de Groot</span>
     <h1>Samen schrijven, in kleur</h1>
     <p class="muted" style="margin:0">Start een schrijfsessie en deel de link. Iedereen schrijft in een eigen kleur, onderin zie je wie wat bijdroeg.</p>
     ${msg?`<p class="err">${esc(msg)}</p>`:""}
     <label class="lbl" for="t">Titel van het nummer</label>
     <input type="text" id="t" placeholder="Bijvoorbeeld: Nachtbus" maxlength="60">
+    <label class="lbl" for="c">Uitnodigingscode</label>
+    <input type="text" id="c" placeholder="Bijvoorbeeld: TEST-ABC123" maxlength="20" autocapitalize="characters" autocomplete="off" value="${esc(store.get("sharenotes:code")||"")}">
+    <p class="muted" style="margin:0;font-size:13px">ShareNotes is in testfase. Een nieuwe sessie starten kan alleen met een uitnodigingscode. Meedoen aan een bestaande sessie gaat via de link die je krijgt.</p>
     <button class="btn" id="go">Start schrijfsessie</button></div>`;
   $("#go").onclick=async()=>{
     const title=$("#t").value.trim()||"Nieuw nummer";
-    const id=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,6);
-    const {error}=await sb.from("sessions").insert({id,title});
-    if(error) return toast("Starten lukte niet: "+error.message);
-    location.search="?s="+id;
+    const code=$("#c").value.trim().toUpperCase();
+    if(!code) return toast("Vul je uitnodigingscode in.");
+    const {data,error}=await sb.rpc("create_session",{p_code:code,p_title:title});
+    if(error) return toast(String(error.message).includes("ONGELDIGE_CODE")?"Deze uitnodigingscode klopt niet of is opgebruikt.":"Starten lukte niet: "+error.message);
+    store.set("sharenotes:code",code);
+    location.search="?s="+data;
   };
 }
 
@@ -199,7 +204,7 @@ function keepAuthors(old,nw,me){const n=old.length,m=nw.length,d=Array.from({len
 
 function renderRoom(){
   $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><div class="acts"><a class="wa" id="wa" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.2A8.5 8.5 0 1 1 21 11.5z"/></svg>WhatsApp</a><button class="share" id="sh">Deel link</button></div></div><div class="who" id="who"></div><div class="tip" id="tip" hidden></div></div>
-  <div class="memos"><div class="lbl"><span>Memo's</span><div class="acts"><label class="up" for="af">+ Bestand</label><input type="file" id="af" accept="audio/*" hidden><button class="rec" id="rec"><i></i>Opnemen</button></div></div><div class="mlist" id="mlist"></div></div>
+  <div class="memos"><div class="lbl"><span>Memo's</span><div class="acts"><label class="up" for="af">+ Bestand</label><input type="file" id="af" accept="audio/*,video/mp4,video/quicktime,.m4a,.mp3,.wav,.aif,.aiff,.opus,.ogg,.3gp,.amr,.caf" hidden><button class="rec" id="rec"><i></i>Opnemen</button></div></div><div class="mlist" id="mlist"></div></div>
   <div class="sheet" id="sheet"></div><div class="split" id="split"></div>`;
   $("#sh").onclick=async()=>{const u=location.href;const t="Doe mee aan onze schrijfsessie: "+S.session.title;if(navigator.share){try{await navigator.share({title:t,text:t,url:u});return}catch(e){if(e&&e.name==="AbortError")return}}try{await navigator.clipboard.writeText(u);toast("Link gekopieerd. Plak hem in WhatsApp.")}catch(e){prompt("Kopieer deze link",u)}};
   const waUrl="https://wa.me/?text="+encodeURIComponent("Doe mee aan onze schrijfsessie: "+S.session.title+"\n"+location.href);
@@ -248,7 +253,7 @@ async function saveMemo(blob,mime,secs,ext){
   if(!S.memos.find(x=>x.id===data.id))S.memos.push(data);renderMemos();toast("Memo opgeslagen")}
 async function addAudioFile(f){
   const name=(f.name||"").toLowerCase();const ext=(name.split(".").pop()||"").replace(/[^a-z0-9]/g,"");
-  const byExt={mp3:"audio/mpeg",m4a:"audio/mp4",mp4:"audio/mp4",aac:"audio/aac",wav:"audio/wav",aif:"audio/aiff",aiff:"audio/aiff",ogg:"audio/ogg",webm:"audio/webm"};
+  const byExt={mp3:"audio/mpeg",m4a:"audio/mp4",mp4:"audio/mp4",aac:"audio/aac",wav:"audio/wav",aif:"audio/aiff",aiff:"audio/aiff",ogg:"audio/ogg",webm:"audio/webm",opus:"audio/ogg",flac:"audio/flac","3gp":"audio/3gpp",amr:"audio/amr",caf:"audio/x-caf",mov:"video/quicktime"};
   const mime=byExt[ext]||(f.type&&f.type.startsWith("audio/")?f.type:"");
   if(!mime)return toast("Dit is geen geluidsbestand. Gebruik bijvoorbeeld mp3, m4a of wav.");
   if(f.size>20*1024*1024)return toast("Bestand is te groot (max 20 MB).");
