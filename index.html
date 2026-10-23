@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d1a24">
+<title>Splitvel</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#ece9f1;--card:#fff;--ink:#1d1a24;--muted:#655f72;--line:#ddd8e6;--soft:#f5f3f8;--cur:#1c7ed6;
+  --display:"Bricolage Grotesque","Avenir Next",system-ui,sans-serif;--body:"IBM Plex Sans","Helvetica Neue",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#121017;--card:#1e1a26;--ink:#f0ecf6;--muted:#a59db4;--line:#373143;--soft:#27222f;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);min-height:100vh;
+  padding:max(16px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.app{max-width:520px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;display:flex;flex-direction:column;min-height:calc(100vh - 40px)}
+.pad{padding:16px}
+h1{font-family:var(--display);font-size:28px;margin:0 0 6px}
+h2{font-family:var(--display);font-size:20px;margin:0}
+.muted{color:var(--muted)} .mono{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.lbl{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:8px}
+input[type=text]{width:100%;font:16px var(--body);padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
+input[type=text]:focus{outline:none;border-color:var(--cur)}
+button{font:600 15px var(--body);cursor:pointer}
+.btn{border:none;border-radius:12px;padding:12px 16px;background:var(--ink);color:var(--card);width:100%}
+.btn.ghost{background:transparent;color:var(--ink);border:2px solid var(--line)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.pal{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.pal button{border:3px solid transparent;border-radius:14px;padding:8px 4px;background:var(--soft);color:var(--ink);font:500 12px var(--body);display:flex;flex-direction:column;align-items:center;gap:5px}
+.pal button span{width:32px;height:32px;border-radius:50%;display:block}
+.pal button[aria-pressed=true]{border-color:var(--ink)}
+.pal button:disabled{opacity:.35;cursor:not-allowed}
+.top{padding:14px 16px 10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.title{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.title b{font-family:var(--display);font-size:20px}
+.who{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:500 13px var(--body);border:2px solid var(--c);border-radius:99px;padding:3px 10px;display:flex;align-items:center;gap:6px}
+.chip i{width:9px;height:9px;border-radius:50%;background:var(--c);opacity:.35}
+.chip.on i{opacity:1;animation:blink 2s infinite}
+@keyframes blink{50%{opacity:.35}}
+.memos{height:140px;padding:10px 16px;background:var(--soft);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.memos .empty{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px;padding:8px}
+.sheet{flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
+.ln{padding:5px 6px;border-radius:8px;cursor:text;font-size:17px;line-height:1.45;animation:in .35s ease-out}
+.ln:hover{background:var(--soft)}
+@keyframes in{from{opacity:.2;transform:translateY(4px)}to{opacity:1;transform:none}}
+.w{font-weight:500;transition:color .4s}
+.ln input{font-size:16px}
+.add{display:flex;gap:6px;margin-top:6px}
+.add input{flex:1;min-width:0;border-color:var(--cur)}
+.add button{border:none;border-radius:12px;padding:0 14px;background:var(--cur);color:#fff}
+.split{border-top:1px solid var(--line);padding:12px 16px 16px;display:flex;flex-direction:column;gap:8px}
+.bar{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--soft)}
+.bar span{height:100%;transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;font-variant-numeric:tabular-nums}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:50%}
+.share{border:2px solid var(--line);background:transparent;color:var(--ink);border-radius:10px;padding:5px 10px;font:500 13px var(--body)}
+.toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:12px;font-size:14px;z-index:9}
+.err{color:#e03131;font-size:13px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app"><div class="pad"><span class="mono">Splitvel laden…</span></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SB_URL="https://unkkwhpfqzbmpbdoazih.supabase.co";
+const SB_KEY="sb_publishable_UZNjBI0n8FbU_FVMWwN1Fw_d-dBHCy0";
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const PAL=[["Oceaan","#1c7ed6"],["Framboos","#d6336c"],["Amber","#f08c00"],["Smaragd","#2f9e44"],["Violet","#7048e8"],["Turkoois","#1098ad"],["Koraal","#f76707"],["Pruim","#ae3ec9"],["Limoen","#74b816"],["Indigo","#4263eb"],["Robijn","#e03131"],["Mosterd","#c99a06"]];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+function toast(t){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
+const params=new URLSearchParams(location.search);
+let S={sid:params.get("s"),session:null,writers:[],lines:[],me:null,online:new Set(),editing:null,channel:null};
+
+async function boot(){
+  if(!S.sid) return renderStart();
+  const {data,error}=await sb.from("sessions").select("*").eq("id",S.sid).maybeSingle();
+  if(error||!data) return renderStart("Deze sessie bestaat niet (meer). Start een nieuwe.");
+  S.session=data;
+  await loadWriters();
+  const mine=store.get("splitvel:"+S.sid);
+  S.me=S.writers.find(w=>w.id===mine)||null;
+  if(!S.me) return renderJoin();
+  enterRoom();
+}
+async function loadWriters(){const {data}=await sb.from("writers").select("*").eq("session_id",S.sid).order("created_at");S.writers=data||[]}
+async function loadLines(){const {data}=await sb.from("lines").select("*").eq("session_id",S.sid).order("pos");S.lines=data||[]}
+
+function renderStart(msg){
+  $("#app").innerHTML=`<div class="pad stack">
+    <span class="mono">Splitvel · pilot</span>
+    <h1>Samen schrijven, in kleur</h1>
+    <p class="muted" style="margin:0">Start een schrijfsessie en deel de link. Iedereen schrijft in een eigen kleur, onderin zie je wie wat bijdroeg.</p>
+    ${msg?`<p class="err">${esc(msg)}</p>`:""}
+    <label class="lbl" for="t">Titel van het nummer</label>
+    <input type="text" id="t" placeholder="Bijvoorbeeld: Nachtbus" maxlength="60">
+    <button class="btn" id="go">Start schrijfsessie</button></div>`;
+  $("#go").onclick=async()=>{
+    const title=$("#t").value.trim()||"Nieuw nummer";
+    const id=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,6);
+    const {error}=await sb.from("sessions").insert({id,title});
+    if(error) return toast("Starten lukte niet: "+error.message);
+    location.search="?s="+id;
+  };
+}
+
+function renderJoin(){
+  let pick=null;const taken=new Map(S.writers.map(w=>[w.color,w.name]));
+  $("#app").innerHTML=`<div class="pad stack">
+    <span class="mono">Je doet mee aan</span><h1>${esc(S.session.title)}</h1>
+    <label class="lbl" for="n">Jouw naam</label><input type="text" id="n" maxlength="24" placeholder="Bijvoorbeeld: Mari">
+    <span class="lbl">Kies je kleur</span>
+    <div class="pal">${PAL.map(([n,h])=>`<button data-h="${h}" ${taken.has(h)?"disabled":""}><span style="background:${h}"></span>${esc(taken.get(h)||n)}</button>`).join("")}</div>
+    <p class="err" id="e"></p>
+    <button class="btn" id="j">Meedoen</button></div>`;
+  document.querySelectorAll(".pal button").forEach(b=>b.onclick=()=>{pick=b.dataset.h;document.querySelectorAll(".pal button").forEach(x=>x.setAttribute("aria-pressed",x===b))});
+  $("#j").onclick=async()=>{
+    const name=$("#n").value.trim();
+    if(!name) return $("#e").textContent="Vul je naam in.";
+    if(!pick) return $("#e").textContent="Kies een kleur.";
+    const {data,error}=await sb.from("writers").insert({session_id:S.sid,name,color:pick}).select().single();
+    if(error){ $("#e").textContent=error.code==="23505"?"Die kleur is net door iemand anders gekozen. Kies een andere.":"Meedoen lukte niet: "+error.message; await loadWriters(); return renderJoin(); }
+    store.set("splitvel:"+S.sid,data.id);S.me=data;await loadWriters();enterRoom();
+  };
+}
+
+async function enterRoom(){
+  document.documentElement.style.setProperty("--cur",S.me.color);
+  await loadLines();
+  renderRoom();
+  S.channel=sb.channel("sessie-"+S.sid,{config:{presence:{key:S.me.id}}})
+    .on("postgres_changes",{event:"*",schema:"public",table:"lines",filter:"session_id=eq."+S.sid},p=>{
+      if(p.eventType==="DELETE"){S.lines=S.lines.filter(l=>l.id!==p.old.id)}
+      else{const i=S.lines.findIndex(l=>l.id===p.new.id);if(i>=0)S.lines[i]=p.new;else S.lines.push(p.new);S.lines.sort((a,b)=>a.pos-b.pos)}
+      if(!S.editing)renderSheet();renderSplit();
+    })
+    .on("postgres_changes",{event:"INSERT",schema:"public",table:"writers",filter:"session_id=eq."+S.sid},p=>{if(!S.writers.find(w=>w.id===p.new.id))S.writers.push(p.new);renderWho();renderSplit()})
+    .on("presence",{event:"sync"},()=>{S.online=new Set(Object.keys(S.channel.presenceState()));renderWho()})
+    .subscribe(async st=>{if(st==="SUBSCRIBED")await S.channel.track({at:Date.now()})});
+}
+const W=id=>S.writers.find(w=>w.id===id)||{name:"?",color:"#999"};
+
+function renderRoom(){
+  $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><button class="share" id="sh">Deel link</button></div><div class="who" id="who"></div></div>
+  <div class="memos"><div class="lbl"><span>Memo's</span></div><div class="empty">Opnemen en een melodie kiezen komt in de volgende stap (fase 3).</div></div>
+  <div class="sheet" id="sheet"></div><div class="split" id="split"></div>`;
+  $("#sh").onclick=async()=>{const u=location.href;try{await navigator.clipboard.writeText(u);toast("Link gekopieerd")}catch(e){prompt("Kopieer deze link",u)}};
+  renderWho();renderSheet();renderSplit();
+}
+function renderWho(){const el=$("#who");if(!el)return;el.innerHTML=S.writers.map(w=>`<span class="chip ${S.online.has(w.id)?"on":""}" style="--c:${w.color}" title="${S.online.has(w.id)?"nu verbonden":"niet verbonden"}"><i></i>${esc(w.name)}${w.id===S.me.id?" (jij)":""}</span>`).join("")}
+function renderSheet(){
+  const el=$("#sheet");if(!el)return;
+  const active=document.activeElement&&document.activeElement.id;const draft=$("#nl")?$("#nl").value:"";
+  el.innerHTML=`<div class="lbl"><span>Tekst · tik een regel om te bewerken</span></div>`+
+   (S.lines.length?"":`<p class="muted" style="margin:6px 0">Nog leeg. Typ hieronder de eerste regel.</p>`)+
+   S.lines.map(l=>l.id===S.editing?`<div class="ln"><input type="text" id="ed" value="${esc(l.words.map(x=>x.w).join(" "))}"></div>`:
+   `<div class="ln" data-id="${l.id}">${l.words.map(x=>`<span class="w" style="color:${W(x.a).color}">${esc(x.w)}</span>`).join(" ")}</div>`).join("")+
+   `<div class="add"><input type="text" id="nl" placeholder="Nieuwe regel als ${esc(S.me.name)}" value="${esc(draft)}"><button id="ad">Voeg toe</button></div>`;
+  el.querySelectorAll(".ln[data-id]").forEach(d=>d.onclick=()=>{S.editing=d.dataset.id;renderSheet();const e=$("#ed");e.focus();e.setSelectionRange(e.value.length,e.value.length)});
+  const ed=$("#ed");
+  if(ed){let done=false;const save=async()=>{if(done)return;done=true;const l=S.lines.find(x=>x.id===S.editing);S.editing=null;if(!l)return renderSheet();
+    const nw=ed.value.trim().split(/\s+/).filter(Boolean);
+    if(!nw.length){S.lines=S.lines.filter(x=>x.id!==l.id);renderSheet();renderSplit();await sb.from("lines").delete().eq("id",l.id);return}
+    const words=nw.map((w,j)=>l.words[j]&&l.words[j].w===w?l.words[j]:{w,a:S.me.id});
+    l.words=words;renderSheet();renderSplit();
+    const {error}=await sb.from("lines").update({words,updated_at:new Date().toISOString()}).eq("id",l.id);if(error)toast("Opslaan lukte niet");};
+    ed.onkeydown=e=>{if(e.key==="Enter")save();if(e.key==="Escape"){done=true;S.editing=null;renderSheet()}};ed.onblur=save}
+  const add=async()=>{const v=$("#nl").value.trim();if(!v)return;$("#nl").value="";
+    const pos=(S.lines.length?S.lines[S.lines.length-1].pos:0)+1;
+    const words=v.split(/\s+/).map(w=>({w,a:S.me.id}));
+    const {data,error}=await sb.from("lines").insert({session_id:S.sid,pos,words}).select().single();
+    if(error)return toast("Toevoegen lukte niet");
+    if(!S.lines.find(l=>l.id===data.id)){S.lines.push(data);S.lines.sort((a,b)=>a.pos-b.pos)}
+    renderSheet();renderSplit();$("#nl").focus()};
+  $("#ad").onclick=add;$("#nl").onkeydown=e=>{if(e.key==="Enter")add()};
+  if(active==="nl")$("#nl").focus();
+}
+function renderSplit(){
+  const el=$("#split");if(!el)return;
+  const c={};let t=0;S.lines.forEach(l=>l.words.forEach(x=>{c[x.a]=(c[x.a]||0)+1;t++}));
+  const ws=S.writers;
+  el.innerHTML=`<div class="lbl"><span>Verdeling tekst</span><span>${t} woorden</span></div>
+   <div class="bar">${ws.map(w=>`<span style="width:${t?(c[w.id]||0)/t*100:0}%;background:${w.color}"></span>`).join("")}</div>
+   <div class="legend">${ws.map(w=>`<span><i style="background:${w.color}"></i>${esc(w.name)} ${t?Math.round((c[w.id]||0)/t*100):0}%</span>`).join("")}</div>
+   <span class="mono">Melodie telt mee zodra memo's erin zitten (fase 3).</span>`;
+}
+boot();
+</script>
+</body>
+</html>
