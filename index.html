@@ -69,6 +69,16 @@ button{font:600 15px var(--body);cursor:pointer}
 .tip button{border:none;border-radius:8px;padding:5px 10px;font:600 12px var(--body)}
 #ti{background:var(--cur);color:#fff}
 #tx{background:transparent;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.tile{background:var(--soft);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:2px}
+.tile b{font-family:var(--display);font-size:26px;font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--muted)}
+.otbl{overflow-x:auto}
+.otbl table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.otbl th{text-align:left;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500;padding:6px 6px;border-bottom:1px solid var(--line)}
+.otbl td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.otbl a{color:var(--cur)}
+@media (max-width:420px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .rowlbl{display:grid;grid-template-columns:62px 1fr;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
 .sheet{flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
 .ln{padding:5px 6px;border-radius:8px;cursor:text;font-size:17px;line-height:1.45;animation:in .35s ease-out}
@@ -102,7 +112,7 @@ const PAL=[["Oceaan","#1c7ed6"],["Framboos","#d6336c"],["Amber","#f08c00"],["Sma
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-function toast(t){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
+function toast(t,ms){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),ms||2200)}
 const params=new URLSearchParams(location.search);
 let S={sid:params.get("s"),session:null,writers:[],lines:[],memos:[],me:null,online:new Set(),editing:null,channel:null,rec:null,recTimer:null,playing:null,audio:new Audio()};
 const fmt=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
@@ -111,6 +121,7 @@ S.audio.onended=()=>{S.playing=null;renderMemos()};
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();S.installEvt=e;renderTip()});
 
 async function boot(){
+  if(params.has("eigenaar")) return renderOwner();
   if(!S.sid) return renderStart();
   const {data,error}=await sb.from("sessions").select("*").eq("id",S.sid).maybeSingle();
   if(error||!data) return renderStart("Deze sessie bestaat niet (meer). Start een nieuwe.");
@@ -125,6 +136,31 @@ async function loadWriters(){const {data}=await sb.from("writers").select("*").e
 async function loadLines(){const {data}=await sb.from("lines").select("*").eq("session_id",S.sid).order("pos");S.lines=data||[]}
 async function loadMemos(){const {data}=await sb.from("memos").select("*").eq("session_id",S.sid).order("created_at");S.memos=data||[]}
 
+function renderOwner(msg){
+  $("#app").innerHTML=`<div class="pad stack">
+    <span class="mono">ShareNotes \u00b7 eigenaarsoverzicht</span>
+    <h1>Overzicht</h1>
+    <label class="lbl" for="oc">Eigenaarscode</label>
+    <input type="text" id="oc" autocomplete="off" autocapitalize="characters" value="${esc(store.get("sharenotes:owner")||"")}">
+    <button class="btn" id="og">Toon overzicht</button>
+    ${msg?`<p class="err">${esc(msg)}</p>`:""}
+    <div id="ov" class="stack"></div></div>`;
+  const go=async()=>{const code=$("#oc").value.trim().toUpperCase();if(!code)return;
+    const {data,error}=await sb.rpc("owner_overview",{p_code:code});
+    if(error)return renderOwner(String(error.message).includes("GEEN_EIGENAAR")?"Deze code geeft geen toegang tot het overzicht.":"Laden lukte niet: "+error.message);
+    store.set("sharenotes:owner",code);
+    const t=data.totaal,dt=v=>v?new Date(v).toLocaleString("nl-NL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"";
+    const base=location.origin+location.pathname;
+    $("#ov").innerHTML=`<div class="tiles">${[["sessies",t.sessies],["deelnemers",t.deelnemers],["regels",t.regels],["memo's",t.memos]].map(([k,v])=>`<div class="tile"><b>${v}</b><span>${k}</span></div>`).join("")}</div>
+      <span class="lbl">Uitnodigingscodes</span>
+      <div class="otbl"><table><tr><th>Code</th><th>Voor</th><th>Gebruikt</th><th>Sessies</th><th>Status</th></tr>
+      ${data.codes.map(c=>`<tr><td><b>${esc(c.code)}</b></td><td>${esc(c.label||"")}</td><td>${c.uses}${c.max_uses?" / "+c.max_uses:" / onbeperkt"}</td><td>${c.sessies}</td><td>${c.active?"actief":"uit"}${c.is_owner?" &middot; eigenaar":""}</td></tr>`).join("")}</table></div>
+      <span class="lbl">Sessies (laatst actief bovenaan)</span>
+      <div class="otbl"><table><tr><th>Titel</th><th>Code</th><th>Mensen</th><th>Woorden</th><th>Memo's</th><th>Laatst actief</th></tr>
+      ${data.sessies.map(x=>`<tr><td><a href="${base}?s=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">${esc(x.title)}</a></td><td>${esc(x.invite_code||"zonder code")}</td><td>${x.deelnemers}</td><td>${x.woorden}</td><td>${x.memos}</td><td>${dt(x.laatst)}</td></tr>`).join("")}</table></div>
+      <span class="mono">Bijgewerkt ${dt(new Date().toISOString())}. Druk op Toon overzicht om te verversen.</span>`};
+  $("#og").onclick=go;if($("#oc").value&&!msg)go();
+}
 function renderStart(msg){
   $("#app").innerHTML=`<div class="pad stack">
     <span class="mono">ShareNotes · pilot · gemaakt door Lex de Groot</span>
@@ -217,7 +253,9 @@ function renderRoom(){
   const mz=$(".memos");
   mz.addEventListener("dragover",e=>{e.preventDefault();mz.classList.add("drop")});
   mz.addEventListener("dragleave",()=>mz.classList.remove("drop"));
-  mz.addEventListener("drop",e=>{e.preventDefault();mz.classList.remove("drop");const f=e.dataTransfer.files[0];if(f)addAudioFile(f)});
+  mz.addEventListener("drop",e=>{e.preventDefault();mz.classList.remove("drop");const dt=e.dataTransfer;let f=dt.files&&dt.files[0];
+    if(!f&&dt.items){for(const it of dt.items){if(it.kind==="file"){f=it.getAsFile();if(f)break}}}
+    if(f)addAudioFile(f);else toast("Dit kon niet worden binnengehaald. Sleep de opname eerst naar je bureaublad en sleep hem dan hierheen, of tik op + Bestand.",6000)});
   renderWho();renderMemos();renderSheet();renderSplit();renderTip();
 }
 function renderTip(){
@@ -255,7 +293,7 @@ async function addAudioFile(f){
   const name=(f.name||"").toLowerCase();const ext=(name.split(".").pop()||"").replace(/[^a-z0-9]/g,"");
   const byExt={mp3:"audio/mpeg",m4a:"audio/mp4",mp4:"audio/mp4",aac:"audio/aac",wav:"audio/wav",aif:"audio/aiff",aiff:"audio/aiff",ogg:"audio/ogg",webm:"audio/webm",opus:"audio/ogg",flac:"audio/flac","3gp":"audio/3gpp",amr:"audio/amr",caf:"audio/x-caf",mov:"video/quicktime"};
   const mime=byExt[ext]||(f.type&&f.type.startsWith("audio/")?f.type:"");
-  if(!mime)return toast("Dit is geen geluidsbestand. Gebruik bijvoorbeeld mp3, m4a of wav.");
+  if(!mime)return toast("Dit bestand ("+(ext||"onbekend")+") kan ShareNotes niet afspelen. Gebruik bijvoorbeeld mp3, m4a of wav.",6000);
   if(f.size>20*1024*1024)return toast("Bestand is te groot (max 20 MB).");
   let secs=0;try{secs=await new Promise(res=>{const a=new Audio();a.preload="metadata";a.onloadedmetadata=()=>res(isFinite(a.duration)?Math.round(a.duration):0);a.onerror=()=>res(0);a.src=URL.createObjectURL(f)})}catch(e){}
   saveMemo(f,mime,Math.max(1,secs),byExt[ext]?ext:"audio")}
