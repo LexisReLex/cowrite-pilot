@@ -149,7 +149,7 @@ function renderRoom(){
   $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><button class="share" id="sh">Deel link</button></div><div class="who" id="who"></div></div>
   <div class="memos"><div class="lbl"><span>Memo's</span></div><div class="empty">Opnemen en een melodie kiezen komt in de volgende stap (fase 3).</div></div>
   <div class="sheet" id="sheet"></div><div class="split" id="split"></div>`;
-  $("#sh").onclick=async()=>{const u=location.href;try{await navigator.clipboard.writeText(u);toast("Link gekopieerd")}catch(e){prompt("Kopieer deze link",u)}};
+  $("#sh").onclick=async()=>{const u=location.href;const t="Doe mee aan onze schrijfsessie: "+S.session.title;if(navigator.share){try{await navigator.share({title:t,text:t,url:u});return}catch(e){if(e&&e.name==="AbortError")return}}try{await navigator.clipboard.writeText(u);toast("Link gekopieerd. Plak hem in WhatsApp.")}catch(e){prompt("Kopieer deze link",u)}};
   renderWho();renderSheet();renderSplit();
 }
 function renderWho(){const el=$("#who");if(!el)return;el.innerHTML=S.writers.map(w=>`<span class="chip ${S.online.has(w.id)?"on":""}" style="--c:${w.color}" title="${S.online.has(w.id)?"nu verbonden":"niet verbonden"}"><i></i>${esc(w.name)}${w.id===S.me.id?" (jij)":""}</span>`).join("")}
