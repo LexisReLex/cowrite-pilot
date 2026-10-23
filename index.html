@@ -143,6 +143,7 @@ async function tryJoin(code){
   const {data,error}=await sb.rpc("join_session",{p_sid:S.sid,p_code:code});
   if(error){const m=errTxt(error);
     if(m.includes("ONBEKEND"))return renderStart("Deze sessie bestaat niet (meer). Start een nieuwe.");
+    if(m.includes("INGETROKKEN"))return renderMsg("Je toegang tot deze sessie is ingetrokken door wie de sessie beheert. Wat je schreef of inzong blijft staan en blijft meetellen.");
     if(m.includes("SLOT"))return renderCode("Deze sessie is op slot. Er kan niemand nieuw meer bij. Vraag het aan wie de sessie startte.");
     if(m.includes("FOUTE_CODE"))return renderCode(code?"Deze sessiecode klopt niet. Kijk hem nog eens na.":"");
     return renderMsg("Binnenkomen lukte niet: "+m)}
@@ -237,7 +238,7 @@ function renderJoin(){
       if(error){if(errTxt(error).includes("KOPPELCODE")){
         $("#cf").innerHTML=`<p style="margin:4px 0"><b style="color:${w.color}">${esc(w.name)}</b> gebruikt ShareNotes al op een ander toestel. Open daar de sessie en tik onderaan op <b>Koppelcode voor ander toestel</b>. Vul die code hier in.</p><input type="text" id="lk" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="Koppelcode"><button class="btn" id="cy" style="background:${w.color}">Koppel en ga verder als ${esc(w.name)}</button>${link?'<p class="err">Deze koppelcode klopt niet.</p>':""}`;
         $("#cy").onclick=()=>claimGo(w);return}
-        return toast("Dat lukte niet: "+errTxt(error))}
+        return toast(errTxt(error).includes("INGETROKKEN")?"Deze naam heeft geen toegang meer tot deze sessie.":"Dat lukte niet: "+errTxt(error),5000)}
       store.set("splitvel:"+S.sid,w.id);S.me=w;enterRoom()}};
   const claimGo=async w=>{const link=$("#lk").value.trim().toUpperCase();if(!link)return;const {error}=await sb.rpc("claim_writer",{p_sid:S.sid,p_writer:w.id,p_link:link});
     if(error)return claim(w.id,true);store.set("splitvel:"+S.sid,w.id);S.me=w;enterRoom()};
@@ -306,8 +307,8 @@ async function renderHost(info){
   if(!info){el.innerHTML="";return}
   const act=async(a,arg,ask)=>{if(ask&&!confirm(ask))return;const {data,error}=await sb.rpc("host_action",{p_sid:S.sid,p_action:a,p_arg:arg||null,p_owner:store.get("sharenotes:owner")});
     if(error)return toast("Dat lukte niet: "+errTxt(error));
-    if(a==="afsluiten"){location.reload();return}renderHost(data);toast("Gedaan.")};
-  const ws=info.schrijvers.filter(w=>w.toestellen>0&&w.id!==S.me.id);
+    if(a==="afsluiten"){location.reload();return}renderHost(data);toast(a==="intrekken"?"Toegang ingetrokken. Er is ook een nieuwe sessiecode. Wie al meedoet blijft erin, nieuwe mensen hebben de nieuwe code nodig.":"Gedaan.",a==="intrekken"?8000:2200)};
+  const ws=info.schrijvers.filter(w=>w.toestellen>0&&!w.ingetrokken&&w.id!==S.me.id);
   el.innerHTML=`<div class="host"><span class="lbl">Jij beheert deze sessie</span>
     <div class="row">Sessiecode <span class="code">${esc(info.join_code)}</span><button class="hb" id="hcp">Kopieer</button><button class="hb" id="hnc">Nieuwe code</button></div>
     <div class="row"><button class="hb" id="hsl">${info.locked?"Slot eraf: weer nieuwe mensen toelaten":"Op slot: niemand nieuw meer erbij"}</button><button class="hb ${info.closed?"":"warn"}" id="hcl">${info.closed?"Sessie weer openen":"Sessie afsluiten"}</button></div>
