@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1d1a24">
-<title>Splitvel</title>
+<title>ShareNotes</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{--bg:#ece9f1;--card:#fff;--ink:#1d1a24;--muted:#655f72;--line:#ddd8e6;--soft:#f5f3f8;--cur:#1c7ed6;
@@ -65,7 +65,7 @@ button{font:600 15px var(--body);cursor:pointer}
 </style>
 </head>
 <body>
-<div class="app" id="app"><div class="pad"><span class="mono">Splitvel laden…</span></div></div>
+<div class="app" id="app"><div class="pad"><span class="mono">ShareNotes laden…</span></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 const SB_URL="https://unkkwhpfqzbmpbdoazih.supabase.co";
@@ -95,7 +95,7 @@ async function loadLines(){const {data}=await sb.from("lines").select("*").eq("s
 
 function renderStart(msg){
   $("#app").innerHTML=`<div class="pad stack">
-    <span class="mono">Splitvel · pilot</span>
+    <span class="mono">ShareNotes · pilot</span>
     <h1>Samen schrijven, in kleur</h1>
     <p class="muted" style="margin:0">Start een schrijfsessie en deel de link. Iedereen schrijft in een eigen kleur, onderin zie je wie wat bijdroeg.</p>
     ${msg?`<p class="err">${esc(msg)}</p>`:""}
