@@ -66,7 +66,7 @@ button{font:600 15px var(--body);cursor:pointer}
 .memos.drop{outline:3px dashed var(--cur);outline-offset:-6px}
 .dropzone{border:2px dashed var(--line);border-radius:12px;padding:8px;text-align:center;font-size:12px;color:var(--muted);transition:all .2s}
 body.dragging .dropzone{border-color:var(--cur);color:var(--ink);background:var(--card);padding:16px;font-size:14px;font-weight:600}
-@media (hover:none){.dropzone{display:none}}
+.dropzone{display:block;cursor:pointer}
 .tip{display:flex;gap:8px;align-items:center;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:13px}
 .tip span{flex:1}
 .tip button{border:none;border-radius:8px;padding:5px 10px;font:600 12px var(--body)}
@@ -281,7 +281,7 @@ function keepAuthors(old,nw,me){const n=old.length,m=nw.length,d=Array.from({len
 
 function renderRoom(){
   $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><div class="acts"><a class="wa" id="wa" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.2A8.5 8.5 0 1 1 21 11.5z"/></svg>WhatsApp</a><button class="share" id="sh">Deel link</button></div></div><div class="who" id="who"></div>${S.session.closed?'<div class="banner">Deze sessie is afgesloten. Tekst en memo\'s liggen vast en kunnen niet meer veranderen.</div>':""}<div class="tip" id="tip" hidden></div><div id="host"></div></div>
-  <div class="memos"><div class="lbl"><span>Memo's</span><div class="acts"><label class="up" for="af">+ Bestand</label><input type="file" id="af" hidden><button class="rec" id="rec"><i></i>Opnemen</button></div></div><div class="mlist" id="mlist"></div><div class="dropzone" id="dz">Sleep hier een audiobestand in (mp3, wav, aiff of m4a)</div><span class="mono" style="font-size:11px">&#10005; verwijdert een memo. Je ziet het alleen bij je eigen memo's.</span></div>
+  <div class="memos"><div class="lbl"><span>Memo's</span><div class="acts"><label class="up" for="af">+ Bestand</label><input type="file" id="af" hidden><button class="rec" id="rec"><i></i>Opnemen</button></div></div><div class="mlist" id="mlist"></div><label class="dropzone" id="dz" for="af">${matchMedia("(hover:none)").matches?"Tik hier en kies een audiobestand (mp3, wav, aiff of m4a, tot 50 MB)":"Sleep hier een audiobestand in, of klik om er een te kiezen (mp3, wav, aiff of m4a, tot 50 MB)"}</label><span class="mono" style="font-size:11px">&#10005; verwijdert een memo. Je ziet het alleen bij je eigen memo's.</span></div>
   <div class="sheet" id="sheet"></div><div class="split" id="split"></div><div class="pad" style="padding-top:0"><button class="small" id="lc">Koppelcode voor ander toestel</button></div>`;
   $("#lc").onclick=async()=>{const {data}=await sb.rpc("my_link_code",{p_sid:S.sid});if(data)toast("Jouw koppelcode: "+data+". Vul die in op je andere toestel als je daar op je naam tikt. Geef hem aan niemand anders.",12000)};
   $("#sh").onclick=async()=>{const u=location.href;const t="Doe mee aan onze schrijfsessie: "+S.session.title+". Je hebt ook de sessiecode nodig.";if(navigator.share){try{await navigator.share({title:t,text:t,url:u});return}catch(e){if(e&&e.name==="AbortError")return}}try{await navigator.clipboard.writeText(u);toast("Link gekopieerd. Plak hem in WhatsApp.")}catch(e){prompt("Kopieer deze link",u)}};
