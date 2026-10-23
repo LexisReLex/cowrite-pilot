@@ -30,7 +30,10 @@ button{font:600 15px var(--body);cursor:pointer}
 .pal button{border:3px solid transparent;border-radius:14px;padding:8px 4px;background:var(--soft);color:var(--ink);font:500 12px var(--body);display:flex;flex-direction:column;align-items:center;gap:5px}
 .pal button span{width:32px;height:32px;border-radius:50%;display:block}
 .pal button[aria-pressed=true]{border-color:var(--ink)}
-.pal button:disabled{opacity:.35;cursor:not-allowed}
+.pal button.taken{opacity:.45}
+.claimbox{display:flex;flex-direction:column;gap:8px;padding:12px;border:2px solid var(--line);border-radius:14px}
+.claim{background:transparent;color:var(--ink);cursor:pointer}
+.claim i{opacity:1}
 .top{padding:14px 16px 10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
 .title{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .acts{display:flex;gap:6px}
@@ -127,19 +130,28 @@ function renderStart(msg){
 }
 
 function renderJoin(){
-  let pick=null;const taken=new Map(S.writers.map(w=>[w.color,w.name]));
+  let pick=null;const taken=new Map(S.writers.map(w=>[w.color,w]));
   $("#app").innerHTML=`<div class="pad stack">
     <span class="mono">Je doet mee aan</span><h1>${esc(S.session.title)}</h1>
+    ${S.writers.length?`<div class="claimbox"><span class="lbl">Doe je al mee op een ander apparaat? Tik op je naam</span>
+    <div class="who">${S.writers.map(w=>`<button class="chip claim" data-id="${w.id}" style="--c:${w.color}"><i></i>${esc(w.name)}</button>`).join("")}</div>
+    <div id="cf"></div></div>
+    <span class="lbl">Ben je nieuw? Vul je naam in en kies een vrije kleur</span>`:""}
     <label class="lbl" for="n">Jouw naam</label><input type="text" id="n" maxlength="24" placeholder="Bijvoorbeeld: Mari">
     <span class="lbl">Kies je kleur</span>
-    <div class="pal">${PAL.map(([n,h])=>`<button data-h="${h}" ${taken.has(h)?"disabled":""}><span style="background:${h}"></span>${esc(taken.get(h)||n)}</button>`).join("")}</div>
+    <div class="pal">${PAL.map(([n,h])=>{const t=taken.get(h);return `<button data-h="${h}" ${t?`data-owner="${t.id}" class="taken"`:""}><span style="background:${h}"></span>${esc(t?t.name:n)}</button>`}).join("")}</div>
     <p class="err" id="e"></p>
-    <button class="btn" id="j">Meedoen</button></div>`;
-  document.querySelectorAll(".pal button").forEach(b=>b.onclick=()=>{pick=b.dataset.h;document.querySelectorAll(".pal button").forEach(x=>x.setAttribute("aria-pressed",x===b))});
+    <button class="btn" id="j">Meedoen als nieuwe schrijver</button></div>`;
+  const claim=id=>{const w=S.writers.find(x=>x.id===id);if(!w)return;
+    $("#cf").innerHTML=`<p style="margin:4px 0">Ben jij <b style="color:${w.color}">${esc(w.name)}</b>?</p><button class="btn" id="cy" style="background:${w.color}">Ja, ga verder als ${esc(w.name)}</button>`;
+    $("#cf").scrollIntoView({behavior:"smooth",block:"center"});
+    $("#cy").onclick=()=>{store.set("splitvel:"+S.sid,w.id);S.me=w;enterRoom()}};
+  document.querySelectorAll(".claim").forEach(b=>b.onclick=()=>claim(b.dataset.id));
+  document.querySelectorAll(".pal button").forEach(b=>b.onclick=()=>{if(b.dataset.owner)return claim(b.dataset.owner);pick=b.dataset.h;document.querySelectorAll(".pal button").forEach(x=>x.setAttribute("aria-pressed",x===b))});
   $("#j").onclick=async()=>{
     const name=$("#n").value.trim();
     if(!name) return $("#e").textContent="Vul je naam in.";
-    if(!pick) return $("#e").textContent="Kies een kleur.";
+    if(!pick) return $("#e").textContent="Kies een vrije kleur. Een kleur met een naam eronder is al van iemand.";
     const {data,error}=await sb.from("writers").insert({session_id:S.sid,name,color:pick}).select().single();
     if(error){ $("#e").textContent=error.code==="23505"?"Die kleur is net door iemand anders gekozen. Kies een andere.":"Meedoen lukte niet: "+error.message; await loadWriters(); return renderJoin(); }
     store.set("splitvel:"+S.sid,data.id);S.me=data;await loadWriters();enterRoom();
