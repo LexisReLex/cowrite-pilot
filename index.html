@@ -146,6 +146,9 @@ async function enterRoom(){
     .subscribe(async st=>{if(st==="SUBSCRIBED")await S.channel.track({at:Date.now()})});
 }
 const W=id=>S.writers.find(w=>w.id===id)||{name:"?",color:"#999"};
+function keepAuthors(old,nw,me){const n=old.length,m=nw.length,d=Array.from({length:n+1},()=>new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)d[i][j]=old[i].w===nw[j]?d[i+1][j+1]+1:Math.max(d[i+1][j],d[i][j+1]);
+  const out=[];let i=0,j=0;while(j<m){if(i<n&&old[i].w===nw[j]){out.push(old[i]);i++;j++}else if(i<n&&d[i+1][j]>=d[i][j+1]){i++}else{out.push({w:nw[j],a:me});j++}}return out}
 
 function renderRoom(){
   $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><div class="acts"><a class="wa" id="wa" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.2A8.5 8.5 0 1 1 21 11.5z"/></svg>WhatsApp</a><button class="share" id="sh">Deel link</button></div></div><div class="who" id="who"></div></div>
@@ -169,7 +172,7 @@ function renderSheet(){
   if(ed){let done=false;const save=async()=>{if(done)return;done=true;const l=S.lines.find(x=>x.id===S.editing);S.editing=null;if(!l)return renderSheet();
     const nw=ed.value.trim().split(/\s+/).filter(Boolean);
     if(!nw.length){S.lines=S.lines.filter(x=>x.id!==l.id);renderSheet();renderSplit();await sb.from("lines").delete().eq("id",l.id);return}
-    const words=nw.map((w,j)=>l.words[j]&&l.words[j].w===w?l.words[j]:{w,a:S.me.id});
+    const words=keepAuthors(l.words,nw,S.me.id);
     l.words=words;renderSheet();renderSplit();
     const {error}=await sb.from("lines").update({words,updated_at:new Date().toISOString()}).eq("id",l.id);if(error)toast("Opslaan lukte niet");};
     ed.onkeydown=e=>{if(e.key==="Enter")save();if(e.key==="Escape"){done=true;S.editing=null;renderSheet()}};ed.onblur=save}
