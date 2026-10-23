@@ -207,8 +207,8 @@ function renderOwner(msg){
 }
 function bindCodes(owner,refresh){
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{const sid=b.dataset.del,t=b.dataset.t;
-    if(!confirm("Sessie \""+t+"\" definitief verwijderen? Alle tekst, memo's en de vastgelegde verdeling zijn daarna weg. Dit kan niet ongedaan worden gemaakt."))return;
-    if(!confirm("Weet je het zeker? Laatste controle: \""+t+"\" wordt nu verwijderd."))return;
+    if(!confirm("Weet je zeker dat je de sessie \""+t+"\" wilt verwijderen?\n\nAlle tekst, memo's en de vastgelegde verdeling zijn daarna weg. Dit kan niet ongedaan worden gemaakt."))return;
+    if(!confirm("Laatste controle: de sessie \""+t+"\" wordt nu definitief verwijderd. Doorgaan?"))return;
     b.disabled=true;b.textContent="Bezig...";
     const s1=await sb.rpc("owner_delete_session",{p_owner:owner,p_sid:sid,p_stage:"start"});if(s1.error){b.disabled=false;b.textContent="Verwijder";return toast("Dat lukte niet: "+errTxt(s1.error))}
     const paths=s1.data.paths||[];for(let i=0;i<paths.length;i+=50){await sb.storage.from("memos").remove(paths.slice(i,i+50))}
