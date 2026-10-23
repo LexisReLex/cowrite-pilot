@@ -64,6 +64,9 @@ button{font:600 15px var(--body);cursor:pointer}
 .rec.on i{animation:blink .8s infinite}
 .up{border:2px solid var(--line);border-radius:99px;padding:4px 11px;font:600 12px var(--body);color:var(--ink);background:var(--card);cursor:pointer}
 .memos.drop{outline:3px dashed var(--cur);outline-offset:-6px}
+.dropzone{border:2px dashed var(--line);border-radius:12px;padding:8px;text-align:center;font-size:12px;color:var(--muted);transition:all .2s}
+body.dragging .dropzone{border-color:var(--cur);color:var(--ink);background:var(--card);padding:16px;font-size:14px;font-weight:600}
+@media (hover:none){.dropzone{display:none}}
 .tip{display:flex;gap:8px;align-items:center;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:13px}
 .tip span{flex:1}
 .tip button{border:none;border-radius:8px;padding:5px 10px;font:600 12px var(--body)}
@@ -240,7 +243,7 @@ function keepAuthors(old,nw,me){const n=old.length,m=nw.length,d=Array.from({len
 
 function renderRoom(){
   $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><div class="acts"><a class="wa" id="wa" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.2A8.5 8.5 0 1 1 21 11.5z"/></svg>WhatsApp</a><button class="share" id="sh">Deel link</button></div></div><div class="who" id="who"></div><div class="tip" id="tip" hidden></div></div>
-  <div class="memos"><div class="lbl"><span>Memo's</span><div class="acts"><label class="up" for="af">+ Bestand</label><input type="file" id="af" accept=".mp3,.wav,.aif,.aiff,.m4a,audio/mpeg,audio/wav,audio/aiff,audio/mp4,audio/x-m4a" hidden><button class="rec" id="rec"><i></i>Opnemen</button></div></div><div class="mlist" id="mlist"></div></div>
+  <div class="memos"><div class="lbl"><span>Memo's</span><div class="acts"><label class="up" for="af">+ Bestand</label><input type="file" id="af" accept=".mp3,.wav,.aif,.aiff,.m4a,audio/mpeg,audio/wav,audio/aiff,audio/mp4,audio/x-m4a" hidden><button class="rec" id="rec"><i></i>Opnemen</button></div></div><div class="mlist" id="mlist"></div><div class="dropzone" id="dz">Sleep hier een audiobestand in (mp3, wav, aiff of m4a)</div></div>
   <div class="sheet" id="sheet"></div><div class="split" id="split"></div>`;
   $("#sh").onclick=async()=>{const u=location.href;const t="Doe mee aan onze schrijfsessie: "+S.session.title;if(navigator.share){try{await navigator.share({title:t,text:t,url:u});return}catch(e){if(e&&e.name==="AbortError")return}}try{await navigator.clipboard.writeText(u);toast("Link gekopieerd. Plak hem in WhatsApp.")}catch(e){prompt("Kopieer deze link",u)}};
   const waUrl="https://wa.me/?text="+encodeURIComponent("Doe mee aan onze schrijfsessie: "+S.session.title+"\n"+location.href);
@@ -250,12 +253,12 @@ function renderRoom(){
     if(w){toast("WhatsApp opent in een apart venster. Sluit dat na het versturen.")}else{window.open(waUrl,"_blank")}};
   $("#rec").onclick=toggleRec;
   $("#af").onchange=e=>{const f=e.target.files[0];e.target.value="";if(f)addAudioFile(f)};
-  const mz=$(".memos");
-  mz.addEventListener("dragover",e=>{e.preventDefault();mz.classList.add("drop")});
-  mz.addEventListener("dragleave",()=>mz.classList.remove("drop"));
-  mz.addEventListener("drop",e=>{e.preventDefault();mz.classList.remove("drop");const dt=e.dataTransfer;let f=dt.files&&dt.files[0];
+  if(!window.__dropBound){window.__dropBound=true;
+  window.addEventListener("dragover",e=>{e.preventDefault();document.body.classList.add("dragging")});
+  window.addEventListener("dragleave",e=>{if(!e.relatedTarget)document.body.classList.remove("dragging")});
+  window.addEventListener("drop",e=>{e.preventDefault();document.body.classList.remove("dragging");if(!$("#mlist"))return;const dt=e.dataTransfer;let f=dt.files&&dt.files[0];
     if(!f&&dt.items){for(const it of dt.items){if(it.kind==="file"){f=it.getAsFile();if(f)break}}}
-    if(f)addAudioFile(f);else toast("Dit kon niet worden binnengehaald. Sleep de opname eerst naar je bureaublad en sleep hem dan hierheen, of tik op + Bestand.",6000)});
+    if(f)addAudioFile(f);else toast("Dit kon niet worden binnengehaald. Sleep de opname eerst naar je bureaublad en sleep hem dan hierheen, of tik op + Bestand.",6000)})}
   renderWho();renderMemos();renderSheet();renderSplit();renderTip();
 }
 function renderTip(){
