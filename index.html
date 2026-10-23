@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1d1a24">
+<meta name="theme-color" content="#18171c">
 <title>ShareNotes</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -11,11 +11,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ShareNotes">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-:root{--bg:#ece9f1;--card:#fff;--ink:#1d1a24;--muted:#655f72;--line:#ddd8e6;--soft:#f5f3f8;--cur:#1c7ed6;
-  --display:"Bricolage Grotesque","Avenir Next",system-ui,sans-serif;--body:"IBM Plex Sans","Helvetica Neue",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#121017;--card:#1e1a26;--ink:#f0ecf6;--muted:#a59db4;--line:#373143;--soft:#27222f;color-scheme:dark}}
+:root{--bg:#efeeeb;--card:#fff;--ink:#18171c;--muted:#5c5a63;--line:#dddbd6;--soft:#f6f5f2;--cur:#2f62c9;
+  --display:"Archivo","Helvetica Neue",system-ui,sans-serif;--body:"IBM Plex Sans","Helvetica Neue",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:light}
+/* Bewust alleen licht: iedere schrijver moet op elk toestel exact dezelfde inktkleur zien. */
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0}
@@ -60,7 +60,7 @@ button{font:600 15px var(--body);cursor:pointer}
 .star{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:10px;padding:5px 8px;font:500 12px var(--body);white-space:nowrap}
 .star[aria-pressed=true]{background:var(--c);border-color:var(--c);color:#fff}
 .del{border:none;background:transparent;color:var(--muted);font-size:15px;padding:4px}
-.rec{border:none;border-radius:99px;padding:6px 12px;font:600 12px var(--body);color:#fff;background:#e03131;display:flex;align-items:center;gap:6px}
+.rec{border:none;border-radius:99px;padding:6px 12px;font:600 12px var(--body);color:#fff;background:#c8312b;display:flex;align-items:center;gap:6px}
 .rec i{width:8px;height:8px;border-radius:50%;background:#fff}
 .rec.on i{animation:blink .8s infinite}
 .up{border:2px solid var(--line);border-radius:99px;padding:4px 11px;font:600 12px var(--body);color:var(--ink);background:var(--card);cursor:pointer}
@@ -121,7 +121,10 @@ body.dragging .dropzone{border-color:var(--cur);color:var(--ink);background:var(
 const SB_URL="https://unkkwhpfqzbmpbdoazih.supabase.co";
 const SB_KEY="sb_publishable_UZNjBI0n8FbU_FVMWwN1Fw_d-dBHCy0";
 const sb=supabase.createClient(SB_URL,SB_KEY);
-const PAL=[["Oceaan","#1c7ed6"],["Framboos","#d6336c"],["Amber","#f08c00"],["Smaragd","#2f9e44"],["Violet","#7048e8"],["Turkoois","#1098ad"],["Koraal","#f76707"],["Pruim","#ae3ec9"],["Limoen","#74b816"],["Indigo","#4263eb"],["Robijn","#e03131"],["Mosterd","#c99a06"]];
+const PAL=[["Kobalt","#2f62c9"],["Bordeaux","#b4234a"],["Oker","#a8690a"],["Salie","#3f7d4c"],["Indigo","#5b4bc4"],["Petrol","#1a7380"],["Koper","#b5541f"],["Pruim","#8e3a8f"],["Mos","#4d7a12"],["Nachtblauw","#34489e"],["Signaalrood","#c03030"],["Brons","#8c6a12"]];
+const RECOL={"#1c7ed6":"#2f62c9","#d6336c":"#b4234a","#f08c00":"#a8690a","#2f9e44":"#3f7d4c","#7048e8":"#5b4bc4","#1098ad":"#1a7380","#f76707":"#b5541f","#ae3ec9":"#8e3a8f","#74b816":"#4d7a12","#4263eb":"#34489e","#e03131":"#c03030","#c99a06":"#8c6a12"};
+const C=h=>RECOL[(h||"").toLowerCase()]||h;
+const withC=w=>w?{...w,color:C(w.color)}:w;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
@@ -168,7 +171,7 @@ function renderCode(msg){
   const go=()=>{const c=$("#sc").value.trim().toUpperCase();if(c)tryJoin(c)};
   $("#sg").onclick=go;$("#sc").onkeydown=e=>{if(e.key==="Enter")go()};
 }
-async function loadWriters(){const {data}=await sb.from("writers").select("*").eq("session_id",S.sid).order("created_at");S.writers=data||[]}
+async function loadWriters(){const {data}=await sb.from("writers").select("*").eq("session_id",S.sid).order("created_at");S.writers=(data||[]).map(withC)}
 async function loadLines(){const {data}=await sb.from("lines").select("*").eq("session_id",S.sid).order("pos");S.lines=data||[]}
 async function loadMemos(){const {data}=await sb.from("memos").select("*").eq("session_id",S.sid).order("created_at");S.memos=data||[]}
 
@@ -292,7 +295,7 @@ async function enterRoom(){
       else{const i=S.memos.findIndex(m=>m.id===p.new.id);if(i>=0)S.memos[i]=p.new;else S.memos.push(p.new)}
       renderMemos();renderSplit();
     })
-    .on("postgres_changes",{event:"INSERT",schema:"public",table:"writers",filter:"session_id=eq."+S.sid},p=>{if(!S.writers.find(w=>w.id===p.new.id))S.writers.push(p.new);renderWho();renderSplit()})
+    .on("postgres_changes",{event:"INSERT",schema:"public",table:"writers",filter:"session_id=eq."+S.sid},p=>{if(!S.writers.find(w=>w.id===p.new.id))S.writers.push(withC(p.new));renderWho();renderSplit()})
     .on("broadcast",{event:"sessie"},({payload})=>{if(!payload)return;if(typeof payload.closed==="boolean"&&payload.closed!==!!S.session.closed){location.reload();return}if(payload.title){S.session.title=payload.title;const t=$("#tt");if(t)t.textContent=payload.title}})
     .on("broadcast",{event:"akkoord"},()=>{if(S.session.closed)renderSeal()})
     .on("presence",{event:"sync"},()=>{S.online=new Set(Object.keys(S.channel.presenceState()));renderWho()})
@@ -372,6 +375,7 @@ async function renderSeal(){
   const {data:z,error}=await sb.rpc("seal_info",{p_sid:S.sid});
   if(error||!z){el.innerHTML="";return}
   const ok=new Map(z.akkoord.map(a=>[a.writer_id,a.at]));
+  z.snapshot.schrijvers=z.snapshot.schrijvers.map(withC);
   const ws=z.snapshot.schrijvers.filter(w=>w.totaal>0);
   const dt=v=>new Date(v).toLocaleString("nl-NL",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
   const me=ws.find(w=>w.id===z.mij);
