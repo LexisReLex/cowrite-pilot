@@ -101,6 +101,13 @@ body.dragging .dropzone{border-color:var(--cur);color:var(--ink);background:var(
 .share{border:2px solid var(--line);background:transparent;color:var(--ink);border-radius:10px;padding:5px 10px;font:500 13px var(--body)}
 .toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:12px;font-size:14px;z-index:9}
 .err{color:#e03131;font-size:13px}
+.host{display:flex;flex-direction:column;gap:8px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px}
+.host .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.host .code{font:600 18px var(--mono);letter-spacing:.12em}
+.hb{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:5px 10px;font:600 12px var(--body)}
+.hb.warn{border-color:#e03131;color:#e03131}
+.banner{background:#fff3bf;color:#5c4400;border-radius:10px;padding:6px 10px;font-size:13px}
+.small{border:none;background:transparent;color:var(--muted);font:500 12px var(--body);text-decoration:underline;padding:0;width:auto}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -119,21 +126,43 @@ function toast(t,ms){const d=document.createElement("div");d.className="toast";d
 const params=new URLSearchParams(location.search);
 let S={sid:params.get("s"),session:null,writers:[],lines:[],memos:[],me:null,online:new Set(),editing:null,channel:null,rec:null,recTimer:null,playing:null,audio:new Audio()};
 const fmt=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
-const pub=p=>sb.storage.from("memos").getPublicUrl(p).data.publicUrl;
+const signed=async p=>{const {data}=await sb.storage.from("memos").createSignedUrl(p,3600);return data&&data.signedUrl};
+async function ensureAuth(){try{const {data}=await sb.auth.getSession();if(data&&data.session)return true;const r=await sb.auth.signInAnonymously();return !r.error}catch(e){return false}}
+const errTxt=e=>String(e&&e.message||e);
 S.audio.onended=()=>{S.playing=null;renderMemos()};
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();S.installEvt=e;renderTip()});
 
 async function boot(){
   if(params.has("eigenaar")) return renderOwner();
+  if(!await ensureAuth()) return renderMsg("Verbinden lukte niet. Controleer je internet en open de link opnieuw.");
   if(!S.sid) return renderStart();
-  const {data,error}=await sb.from("sessions").select("*").eq("id",S.sid).maybeSingle();
-  if(error||!data) return renderStart("Deze sessie bestaat niet (meer). Start een nieuwe.");
-  S.session=data;
+  return tryJoin(null);
+}
+function renderMsg(t){$("#app").innerHTML=`<div class="pad stack"><span class="mono">ShareNotes</span><p>${esc(t)}</p></div>`}
+async function tryJoin(code){
+  const {data,error}=await sb.rpc("join_session",{p_sid:S.sid,p_code:code});
+  if(error){const m=errTxt(error);
+    if(m.includes("ONBEKEND"))return renderStart("Deze sessie bestaat niet (meer). Start een nieuwe.");
+    if(m.includes("SLOT"))return renderCode("Deze sessie is op slot. Er kan niemand nieuw meer bij. Vraag het aan wie de sessie startte.");
+    if(m.includes("FOUTE_CODE"))return renderCode(code?"Deze sessiecode klopt niet. Kijk hem nog eens na.":"");
+    return renderMsg("Binnenkomen lukte niet: "+m)}
+  S.session={id:S.sid,title:data.title,closed:data.closed};
   await loadWriters();
-  const mine=store.get("splitvel:"+S.sid);
-  S.me=S.writers.find(w=>w.id===mine)||null;
+  S.me=S.writers.find(w=>w.id===data.writer)||null;
   if(!S.me) return renderJoin();
+  store.set("splitvel:"+S.sid,S.me.id);
   enterRoom();
+}
+function renderCode(msg){
+  $("#app").innerHTML=`<div class="pad stack">
+    <span class="mono">ShareNotes</span><h1>Sessiecode</h1>
+    <p class="muted" style="margin:0">Deze schrijfsessie is beveiligd. Vul de sessiecode in die je kreeg van wie de sessie startte. Dit hoeft maar één keer per telefoon.</p>
+    <label class="lbl" for="sc">Sessiecode</label>
+    <input type="text" id="sc" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="Bijvoorbeeld: K7RM2Q">
+    ${msg?`<p class="err">${esc(msg)}</p>`:""}
+    <button class="btn" id="sg">Naar binnen</button></div>`;
+  const go=()=>{const c=$("#sc").value.trim().toUpperCase();if(c)tryJoin(c)};
+  $("#sg").onclick=go;$("#sc").onkeydown=e=>{if(e.key==="Enter")go()};
 }
 async function loadWriters(){const {data}=await sb.from("writers").select("*").eq("session_id",S.sid).order("created_at");S.writers=data||[]}
 async function loadLines(){const {data}=await sb.from("lines").select("*").eq("session_id",S.sid).order("pos");S.lines=data||[]}
@@ -148,7 +177,7 @@ function renderOwner(msg){
     <button class="btn" id="og">Toon overzicht</button>
     ${msg?`<p class="err">${esc(msg)}</p>`:""}
     <div id="ov" class="stack"></div></div>`;
-  const go=async()=>{const code=$("#oc").value.trim().toUpperCase();if(!code)return;
+  const go=async()=>{const code=$("#oc").value.trim().toUpperCase();if(!code)return;await ensureAuth();
     const {data,error}=await sb.rpc("owner_overview",{p_code:code});
     if(error)return renderOwner(String(error.message).includes("GEEN_EIGENAAR")?"Deze code geeft geen toegang tot het overzicht.":"Laden lukte niet: "+error.message);
     store.set("sharenotes:owner",code);
@@ -159,10 +188,10 @@ function renderOwner(msg){
       <div class="otbl"><table><tr><th>Code</th><th>Voor</th><th>Gebruikt</th><th>Sessies</th><th>Status</th></tr>
       ${data.codes.map(c=>`<tr><td><b>${esc(c.code)}</b></td><td>${esc(c.label||"")}</td><td>${c.uses}${c.max_uses?" / "+c.max_uses:" / onbeperkt"}</td><td>${c.sessies}</td><td>${c.active?"actief":"uit"}${c.is_owner?" &middot; eigenaar":""}</td></tr>`).join("")}</table></div>
       <span class="lbl">Sessies (laatst actief bovenaan)</span>
-      <div class="otbl"><table><tr><th>Titel</th><th>Code</th><th>Mensen</th><th>Woorden</th><th>Memo's</th><th>Laatst actief</th></tr>
-      ${data.sessies.map(x=>`<tr><td><a href="${base}?s=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">${esc(x.title)}</a></td><td>${esc(x.invite_code||"zonder code")}</td><td>${x.deelnemers}</td><td>${x.woorden}</td><td>${x.memos}</td><td>${dt(x.laatst)}</td></tr>`).join("")}</table></div>
-      <span class="mono">Bijgewerkt ${dt(new Date().toISOString())}. Druk op Toon overzicht om te verversen.</span>`};
-  $("#og").onclick=go;if($("#oc").value&&!msg)go();
+      <div class="otbl"><table><tr><th>Titel</th><th>Sessiecode</th><th>Status</th><th>Mensen</th><th>Woorden</th><th>Memo's</th><th>Laatst actief</th></tr>
+      ${data.sessies.map(x=>`<tr><td><a href="${base}?s=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">${esc(x.title)}</a></td><td><b>${esc(x.join_code||"")}</b></td><td>${x.closed?"afgesloten":x.locked?"op slot":"open"}</td><td>${x.deelnemers}</td><td>${x.woorden}</td><td>${x.memos}</td><td>${dt(x.laatst)}</td></tr>`).join("")}</table></div>
+      <span class="mono">Bijgewerkt ${dt(new Date().toISOString())}. Druk op Toon overzicht om te verversen. Open een sessie om daar de code te vervangen, het slot te bedienen of toegang in te trekken.</span>`};
+  $("#og").onclick=go;if($("#oc").value&&!msg)ensureAuth().then(go);
 }
 function renderStart(msg){
   $("#app").innerHTML=`<div class="pad stack">
@@ -174,14 +203,14 @@ function renderStart(msg){
     <input type="text" id="t" placeholder="Bijvoorbeeld: Nachtbus" maxlength="60">
     <label class="lbl" for="c">Uitnodigingscode</label>
     <input type="text" id="c" placeholder="Bijvoorbeeld: TEST-ABC123" maxlength="20" autocapitalize="characters" autocomplete="off" value="${esc(store.get("sharenotes:code")||"")}">
-    <p class="muted" style="margin:0;font-size:13px">ShareNotes is in testfase. Een nieuwe sessie starten kan alleen met een uitnodigingscode. Meedoen aan een bestaande sessie gaat via de link die je krijgt.</p>
+    <p class="muted" style="margin:0;font-size:13px">ShareNotes is in testfase. Een nieuwe sessie starten kan alleen met een uitnodigingscode. Meedoen aan een bestaande sessie gaat via de link plus de sessiecode die je krijgt.</p>
     <button class="btn" id="go">Start schrijfsessie</button></div>`;
   $("#go").onclick=async()=>{
     const title=$("#t").value.trim()||"Nieuw nummer";
     const code=$("#c").value.trim().toUpperCase();
     if(!code) return toast("Vul je uitnodigingscode in.");
     const {data,error}=await sb.rpc("create_session",{p_code:code,p_title:title});
-    if(error) return toast(String(error.message).includes("ONGELDIGE_CODE")?"Deze uitnodigingscode klopt niet of is opgebruikt.":"Starten lukte niet: "+error.message);
+    if(error) return toast(errTxt(error).includes("ONGELDIGE_CODE")?"Deze uitnodigingscode klopt niet of is opgebruikt.":"Starten lukte niet: "+error.message);
     store.set("sharenotes:code",code);
     location.search="?s="+data;
   };
@@ -200,19 +229,27 @@ function renderJoin(){
     <div class="pal">${PAL.map(([n,h])=>{const t=taken.get(h);return `<button data-h="${h}" ${t?`data-owner="${t.id}" class="taken"`:""}><span style="background:${h}"></span>${esc(t?t.name:n)}</button>`}).join("")}</div>
     <p class="err" id="e"></p>
     <button class="btn" id="j">Meedoen als nieuwe schrijver</button></div>`;
-  const claim=id=>{const w=S.writers.find(x=>x.id===id);if(!w)return;
+  const claim=(id,bad)=>{const w=S.writers.find(x=>x.id===id);if(!w)return;if(bad){toast("Deze koppelcode klopt niet.",4000)}
     $("#cf").innerHTML=`<p style="margin:4px 0">Ben jij <b style="color:${w.color}">${esc(w.name)}</b>?</p><button class="btn" id="cy" style="background:${w.color}">Ja, ga verder als ${esc(w.name)}</button>`;
     $("#cf").scrollIntoView({behavior:"smooth",block:"center"});
-    $("#cy").onclick=()=>{store.set("splitvel:"+S.sid,w.id);S.me=w;enterRoom()}};
+    $("#cy").onclick=async()=>{const link=$("#lk")?$("#lk").value.trim().toUpperCase():null;
+      const {error}=await sb.rpc("claim_writer",{p_sid:S.sid,p_writer:w.id,p_link:link});
+      if(error){if(errTxt(error).includes("KOPPELCODE")){
+        $("#cf").innerHTML=`<p style="margin:4px 0"><b style="color:${w.color}">${esc(w.name)}</b> gebruikt ShareNotes al op een ander toestel. Open daar de sessie en tik onderaan op <b>Koppelcode voor ander toestel</b>. Vul die code hier in.</p><input type="text" id="lk" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="Koppelcode"><button class="btn" id="cy" style="background:${w.color}">Koppel en ga verder als ${esc(w.name)}</button>${link?'<p class="err">Deze koppelcode klopt niet.</p>':""}`;
+        $("#cy").onclick=()=>claimGo(w);return}
+        return toast("Dat lukte niet: "+errTxt(error))}
+      store.set("splitvel:"+S.sid,w.id);S.me=w;enterRoom()}};
+  const claimGo=async w=>{const link=$("#lk").value.trim().toUpperCase();if(!link)return;const {error}=await sb.rpc("claim_writer",{p_sid:S.sid,p_writer:w.id,p_link:link});
+    if(error)return claim(w.id,true);store.set("splitvel:"+S.sid,w.id);S.me=w;enterRoom()};
   document.querySelectorAll(".claim").forEach(b=>b.onclick=()=>claim(b.dataset.id));
   document.querySelectorAll(".pal button").forEach(b=>b.onclick=()=>{if(b.dataset.owner)return claim(b.dataset.owner);pick=b.dataset.h;document.querySelectorAll(".pal button").forEach(x=>x.setAttribute("aria-pressed",x===b))});
   $("#j").onclick=async()=>{
     const name=$("#n").value.trim();
     if(!name) return $("#e").textContent="Vul je naam in.";
     if(!pick) return $("#e").textContent="Kies een vrije kleur. Een kleur met een naam eronder is al van iemand.";
-    const {data,error}=await sb.from("writers").insert({session_id:S.sid,name,color:pick}).select().single();
-    if(error){ $("#e").textContent=error.code==="23505"?"Die kleur is net door iemand anders gekozen. Kies een andere.":"Meedoen lukte niet: "+error.message; await loadWriters(); return renderJoin(); }
-    store.set("splitvel:"+S.sid,data.id);S.me=data;await loadWriters();enterRoom();
+    const {data,error}=await sb.rpc("join_as_new",{p_sid:S.sid,p_name:name,p_color:pick});
+    if(error){ const m=error.code==="23505"?"Die kleur is net door iemand anders gekozen. Kies een andere.":"Meedoen lukte niet: "+errTxt(error); await loadWriters(); renderJoin(); return toast(m,5000); }
+    await loadWriters();S.me=S.writers.find(w=>w.id===data);store.set("splitvel:"+S.sid,data);enterRoom();
   };
 }
 
@@ -242,16 +279,18 @@ function keepAuthors(old,nw,me){const n=old.length,m=nw.length,d=Array.from({len
   const out=[];let i=0,j=0;while(j<m){if(i<n&&old[i].w===nw[j]){out.push(old[i]);i++;j++}else if(i<n&&d[i+1][j]>=d[i][j+1]){i++}else{out.push({w:nw[j],a:me});j++}}return out}
 
 function renderRoom(){
-  $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><div class="acts"><a class="wa" id="wa" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.2A8.5 8.5 0 1 1 21 11.5z"/></svg>WhatsApp</a><button class="share" id="sh">Deel link</button></div></div><div class="who" id="who"></div><div class="tip" id="tip" hidden></div></div>
+  $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><div class="acts"><a class="wa" id="wa" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.2A8.5 8.5 0 1 1 21 11.5z"/></svg>WhatsApp</a><button class="share" id="sh">Deel link</button></div></div><div class="who" id="who"></div>${S.session.closed?'<div class="banner">Deze sessie is afgesloten. Tekst en memo\'s liggen vast en kunnen niet meer veranderen.</div>':""}<div class="tip" id="tip" hidden></div><div id="host"></div></div>
   <div class="memos"><div class="lbl"><span>Memo's</span><div class="acts"><label class="up" for="af">+ Bestand</label><input type="file" id="af" hidden><button class="rec" id="rec"><i></i>Opnemen</button></div></div><div class="mlist" id="mlist"></div><div class="dropzone" id="dz">Sleep hier een audiobestand in (mp3, wav, aiff of m4a)</div><span class="mono" style="font-size:11px">&#10005; verwijdert een memo. Je ziet het alleen bij je eigen memo's.</span></div>
-  <div class="sheet" id="sheet"></div><div class="split" id="split"></div>`;
-  $("#sh").onclick=async()=>{const u=location.href;const t="Doe mee aan onze schrijfsessie: "+S.session.title;if(navigator.share){try{await navigator.share({title:t,text:t,url:u});return}catch(e){if(e&&e.name==="AbortError")return}}try{await navigator.clipboard.writeText(u);toast("Link gekopieerd. Plak hem in WhatsApp.")}catch(e){prompt("Kopieer deze link",u)}};
-  const waUrl="https://wa.me/?text="+encodeURIComponent("Doe mee aan onze schrijfsessie: "+S.session.title+"\n"+location.href);
+  <div class="sheet" id="sheet"></div><div class="split" id="split"></div><div class="pad" style="padding-top:0"><button class="small" id="lc">Koppelcode voor ander toestel</button></div>`;
+  $("#lc").onclick=async()=>{const {data}=await sb.rpc("my_link_code",{p_sid:S.sid});if(data)toast("Jouw koppelcode: "+data+". Vul die in op je andere toestel als je daar op je naam tikt. Geef hem aan niemand anders.",12000)};
+  $("#sh").onclick=async()=>{const u=location.href;const t="Doe mee aan onze schrijfsessie: "+S.session.title+". Je hebt ook de sessiecode nodig.";if(navigator.share){try{await navigator.share({title:t,text:t,url:u});return}catch(e){if(e&&e.name==="AbortError")return}}try{await navigator.clipboard.writeText(u);toast("Link gekopieerd. Plak hem in WhatsApp.")}catch(e){prompt("Kopieer deze link",u)}};
+  const waUrl="https://wa.me/?text="+encodeURIComponent("Doe mee aan onze schrijfsessie: "+S.session.title+"\n"+location.href+"\nJe hebt ook de sessiecode nodig.");
   $("#wa").href=waUrl;
   $("#wa").onclick=e=>{if(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))return;e.preventDefault();
     const w=window.open(waUrl,"splitvel-wa","popup=yes,width=520,height=720,left="+Math.max(0,screen.width-560)+",top=60");
     if(w){toast("WhatsApp opent in een apart venster. Sluit dat na het versturen.")}else{window.open(waUrl,"_blank")}};
   $("#rec").onclick=toggleRec;
+  if(S.session.closed){$("#rec").remove();$("label.up").remove();$("#dz").remove()}
   $("#af").onchange=e=>{const f=e.target.files[0];e.target.value="";if(f)addAudioFile(f)};
   if(!window.__dropBound){window.__dropBound=true;
   window.addEventListener("dragover",e=>{e.preventDefault();document.body.classList.add("dragging")});
@@ -259,7 +298,27 @@ function renderRoom(){
   window.addEventListener("drop",e=>{e.preventDefault();document.body.classList.remove("dragging");if(!$("#mlist"))return;const dt=e.dataTransfer;let f=dt.files&&dt.files[0];
     if(!f&&dt.items){for(const it of dt.items){if(it.kind==="file"){f=it.getAsFile();if(f)break}}}
     if(f)addAudioFile(f);else toast("Dit kon niet worden binnengehaald. Sleep de opname eerst naar je bureaublad en sleep hem dan hierheen, of tik op + Bestand.",6000)})}
-  renderWho();renderMemos();renderSheet();renderSplit();renderTip();
+  renderWho();renderMemos();renderSheet();renderSplit();renderTip();renderHost();
+}
+async function renderHost(info){
+  const el=$("#host");if(!el)return;
+  if(!info){const {data}=await sb.rpc("host_info",{p_sid:S.sid,p_owner:store.get("sharenotes:owner")});info=data}
+  if(!info){el.innerHTML="";return}
+  const act=async(a,arg,ask)=>{if(ask&&!confirm(ask))return;const {data,error}=await sb.rpc("host_action",{p_sid:S.sid,p_action:a,p_arg:arg||null,p_owner:store.get("sharenotes:owner")});
+    if(error)return toast("Dat lukte niet: "+errTxt(error));
+    if(a==="afsluiten"){location.reload();return}renderHost(data);toast("Gedaan.")};
+  const ws=info.schrijvers.filter(w=>w.toestellen>0&&w.id!==S.me.id);
+  el.innerHTML=`<div class="host"><span class="lbl">Jij beheert deze sessie</span>
+    <div class="row">Sessiecode <span class="code">${esc(info.join_code)}</span><button class="hb" id="hcp">Kopieer</button><button class="hb" id="hnc">Nieuwe code</button></div>
+    <div class="row"><button class="hb" id="hsl">${info.locked?"Slot eraf: weer nieuwe mensen toelaten":"Op slot: niemand nieuw meer erbij"}</button><button class="hb ${info.closed?"":"warn"}" id="hcl">${info.closed?"Sessie weer openen":"Sessie afsluiten"}</button></div>
+    ${ws.length?`<div class="row">Toegang intrekken: ${ws.map(w=>`<button class="hb warn" data-w="${w.id}" style="border-color:${w.color};color:${w.color}">${esc(w.name)}</button>`).join("")}</div>`:""}
+    ${info.zonder_naam?`<span class="mono">${info.zonder_naam} toestel(len) hebben de code ingevuld maar nog geen naam gekozen.</span>`:""}
+    <span class="mono">Status: ${info.locked?"op slot":"open voor wie de code heeft"} &middot; ${info.closed?"afgesloten":"schrijven mag"}</span></div>`;
+  $("#hcp").onclick=async()=>{const t="Doe mee aan onze schrijfsessie: "+S.session.title+"\n"+location.href+"\nSessiecode: "+info.join_code;try{await navigator.clipboard.writeText(t);toast("Link en sessiecode gekopieerd.")}catch(e){prompt("Kopieer dit",t)}};
+  $("#hnc").onclick=()=>act("nieuwe_code",null,"Een nieuwe code maken? De oude code werkt dan niet meer. Wie al meedoet, blijft erin.");
+  $("#hsl").onclick=()=>act("slot");
+  $("#hcl").onclick=()=>act("afsluiten",null,info.closed?"De sessie weer openen? Dan kan iedereen weer schrijven.":"De sessie afsluiten? Dan kan niemand de tekst of memo's nog veranderen, tot jij hem weer opent.");
+  el.querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{const w=info.schrijvers.find(x=>x.id===b.dataset.w);act("intrekken",w.id,"Toegang van "+w.name+" intrekken? "+w.name+" kan daarna niets meer lezen of veranderen. Wat "+w.name+" schreef of inzong blijft staan en blijft meetellen.")});
 }
 function renderTip(){
   const el=$("#tip");if(!el)return;
@@ -277,12 +336,12 @@ function renderMemos(){
   el.innerHTML=S.memos.map(m=>{const w=W(m.writer_id);return `<div class="memo" style="--c:${w.color}"><button class="play" data-id="${m.id}" aria-label="Afspelen">${S.playing===m.id?"&#10074;&#10074;":"&#9654;"}</button><div class="meta"><b>${esc(w.name)}</b> &middot; ${fmt(m.seconds)}${m.chosen?" &middot; gekozen melodie":""}</div><button class="star" data-id="${m.id}" aria-pressed="${m.chosen}">&#9733; ${m.chosen?"Gekozen":"Kies"}</button>${m.writer_id===S.me.id?`<button class="del" data-id="${m.id}" aria-label="Verwijder memo">&#10005;</button>`:"<span></span>"}</div>`}).join("");
   const M=id=>S.memos.find(x=>x.id===id);
   el.querySelectorAll(".play").forEach(b=>b.onclick=()=>{const m=M(b.dataset.id);if(!m)return;
-    if(S.playing===m.id){S.audio.pause();S.playing=null}else{S.audio.src=pub(m.path);S.audio.play().catch(()=>toast("Afspelen lukte niet"));S.playing=m.id}renderMemos()});
+    if(S.playing===m.id){S.audio.pause();S.playing=null}else{S.playing=m.id;signed(m.path).then(u=>{if(!u)return toast("Afspelen lukte niet");S.audio.src=u;S.audio.play().catch(()=>toast("Afspelen lukte niet"))})}renderMemos()});
   el.querySelectorAll(".star").forEach(b=>b.onclick=async()=>{const m=M(b.dataset.id);if(!m)return;m.chosen=!m.chosen;renderMemos();renderSplit();
-    const {error}=await sb.from("memos").update({chosen:m.chosen}).eq("id",m.id);if(error)toast("Opslaan lukte niet")});
+    const {error}=await sb.from("memos").update({chosen:m.chosen}).eq("id",m.id);if(error){m.chosen=!m.chosen;renderMemos();renderSplit();toast(S.session.closed?"De sessie is afgesloten.":"Opslaan lukte niet")}});
   el.querySelectorAll(".del").forEach(b=>b.onclick=async()=>{const m=M(b.dataset.id);if(!m||!confirm("Deze memo verwijderen?"))return;
     if(S.playing===m.id){S.audio.pause();S.playing=null}S.memos=S.memos.filter(x=>x.id!==m.id);renderMemos();renderSplit();
-    await sb.storage.from("memos").remove([m.path]);await sb.from("memos").delete().eq("id",m.id)});
+    await sb.storage.from("memos").remove([m.path]);const {error}=await sb.from("memos").delete().eq("id",m.id);if(error){toast("Verwijderen lukte niet.");loadMemos().then(()=>{renderMemos();renderSplit()})}});
 }
 async function saveMemo(blob,mime,secs,ext){
   const path=S.sid+"/"+(crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(36).slice(2))+"."+ext;
@@ -332,16 +391,17 @@ function renderSheet(){
     if(!nw.length){S.lines=S.lines.filter(x=>x.id!==l.id);renderSheet();renderSplit();await sb.from("lines").delete().eq("id",l.id);return}
     const words=keepAuthors(l.words,nw,S.me.id);
     l.words=words;renderSheet();renderSplit();
-    const {error}=await sb.from("lines").update({words,updated_at:new Date().toISOString()}).eq("id",l.id);if(error)toast("Opslaan lukte niet");};
+    const {error}=await sb.from("lines").update({words,updated_at:new Date().toISOString()}).eq("id",l.id);if(error){toast(S.session.closed?"De sessie is afgesloten.":"Iemand wijzigde deze regel tegelijk. Je ziet nu de nieuwste versie.",5000);await loadLines();renderSheet();renderSplit()}};
     ed.onkeydown=e=>{if(e.key==="Enter")save();if(e.key==="Escape"){done=true;S.editing=null;renderSheet()}};ed.onblur=save}
   const add=async()=>{const v=$("#nl").value.trim();if(!v)return;$("#nl").value="";
     const pos=(S.lines.length?S.lines[S.lines.length-1].pos:0)+1;
     const words=v.split(/\s+/).map(w=>({w,a:S.me.id}));
     const {data,error}=await sb.from("lines").insert({session_id:S.sid,pos,words}).select().single();
-    if(error)return toast("Toevoegen lukte niet");
+    if(error)return toast(S.session.closed?"De sessie is afgesloten.":"Toevoegen lukte niet");
     if(!S.lines.find(l=>l.id===data.id)){S.lines.push(data);S.lines.sort((a,b)=>a.pos-b.pos)}
     renderSheet();renderSplit();$("#nl").focus()};
   $("#ad").onclick=add;$("#nl").onkeydown=e=>{if(e.key==="Enter")add()};
+  if(S.session.closed){$(".add").remove();el.querySelectorAll(".ln[data-id]").forEach(d=>d.onclick=null)}
   if(active==="nl")$("#nl").focus();
 }
 function renderSplit(){
