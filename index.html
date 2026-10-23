@@ -155,7 +155,11 @@ function renderRoom(){
   <div class="memos"><div class="lbl"><span>Memo's</span></div><div class="empty">Opnemen en een melodie kiezen komt in de volgende stap (fase 3).</div></div>
   <div class="sheet" id="sheet"></div><div class="split" id="split"></div>`;
   $("#sh").onclick=async()=>{const u=location.href;const t="Doe mee aan onze schrijfsessie: "+S.session.title;if(navigator.share){try{await navigator.share({title:t,text:t,url:u});return}catch(e){if(e&&e.name==="AbortError")return}}try{await navigator.clipboard.writeText(u);toast("Link gekopieerd. Plak hem in WhatsApp.")}catch(e){prompt("Kopieer deze link",u)}};
-  $("#wa").href="https://wa.me/?text="+encodeURIComponent("Doe mee aan onze schrijfsessie: "+S.session.title+"\n"+location.href);
+  const waUrl="https://wa.me/?text="+encodeURIComponent("Doe mee aan onze schrijfsessie: "+S.session.title+"\n"+location.href);
+  $("#wa").href=waUrl;
+  $("#wa").onclick=e=>{if(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))return;e.preventDefault();
+    const w=window.open(waUrl,"splitvel-wa","popup=yes,width=520,height=720,left="+Math.max(0,screen.width-560)+",top=60");
+    if(w){toast("WhatsApp opent in een apart venster. Sluit dat na het versturen.")}else{window.open(waUrl,"_blank")}};
   renderWho();renderSheet();renderSplit();
 }
 function renderWho(){const el=$("#who");if(!el)return;el.innerHTML=S.writers.map(w=>`<span class="chip ${S.online.has(w.id)?"on":""}" style="--c:${w.color}" title="${S.online.has(w.id)?"nu verbonden":"niet verbonden"}"><i></i>${esc(w.name)}${w.id===S.me.id?" (jij)":""}</span>`).join("")}
