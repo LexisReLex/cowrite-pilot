@@ -41,8 +41,19 @@ button{font:600 15px var(--body);cursor:pointer}
 .chip i{width:9px;height:9px;border-radius:50%;background:var(--c);opacity:.35}
 .chip.on i{opacity:1;animation:blink 2s infinite}
 @keyframes blink{50%{opacity:.35}}
-.memos{height:140px;padding:10px 16px;background:var(--soft);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
-.memos .empty{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px;padding:8px}
+.memos{padding:10px 16px;background:var(--soft);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.mlist{height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.memos .empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px;padding:8px}
+.memo{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;background:var(--card);border-radius:12px;padding:6px 8px;border-left:5px solid var(--c);animation:in .35s ease-out}
+.play{width:34px;height:34px;border-radius:50%;border:none;background:var(--c);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center}
+.meta{font-size:12px;color:var(--muted)} .meta b{color:var(--ink)}
+.star{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:10px;padding:5px 8px;font:500 12px var(--body);white-space:nowrap}
+.star[aria-pressed=true]{background:var(--c);border-color:var(--c);color:#fff}
+.del{border:none;background:transparent;color:var(--muted);font-size:15px;padding:4px}
+.rec{border:none;border-radius:99px;padding:6px 12px;font:600 12px var(--body);color:#fff;background:#e03131;display:flex;align-items:center;gap:6px}
+.rec i{width:8px;height:8px;border-radius:50%;background:#fff}
+.rec.on i{animation:blink .8s infinite}
+.rowlbl{display:grid;grid-template-columns:62px 1fr;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
 .sheet{flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
 .ln{padding:5px 6px;border-radius:8px;cursor:text;font-size:17px;line-height:1.45;animation:in .35s ease-out}
 .ln:hover{background:var(--soft)}
@@ -77,7 +88,10 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 function toast(t){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
 const params=new URLSearchParams(location.search);
-let S={sid:params.get("s"),session:null,writers:[],lines:[],me:null,online:new Set(),editing:null,channel:null};
+let S={sid:params.get("s"),session:null,writers:[],lines:[],memos:[],me:null,online:new Set(),editing:null,channel:null,rec:null,recTimer:null,playing:null,audio:new Audio()};
+const fmt=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+const pub=p=>sb.storage.from("memos").getPublicUrl(p).data.publicUrl;
+S.audio.onended=()=>{S.playing=null;renderMemos()};
 
 async function boot(){
   if(!S.sid) return renderStart();
@@ -92,6 +106,7 @@ async function boot(){
 }
 async function loadWriters(){const {data}=await sb.from("writers").select("*").eq("session_id",S.sid).order("created_at");S.writers=data||[]}
 async function loadLines(){const {data}=await sb.from("lines").select("*").eq("session_id",S.sid).order("pos");S.lines=data||[]}
+async function loadMemos(){const {data}=await sb.from("memos").select("*").eq("session_id",S.sid).order("created_at");S.memos=data||[]}
 
 function renderStart(msg){
   $("#app").innerHTML=`<div class="pad stack">
@@ -134,12 +149,18 @@ function renderJoin(){
 async function enterRoom(){
   document.documentElement.style.setProperty("--cur",S.me.color);
   await loadLines();
+  await loadMemos();
   renderRoom();
   S.channel=sb.channel("sessie-"+S.sid,{config:{presence:{key:S.me.id}}})
     .on("postgres_changes",{event:"*",schema:"public",table:"lines",filter:"session_id=eq."+S.sid},p=>{
       if(p.eventType==="DELETE"){S.lines=S.lines.filter(l=>l.id!==p.old.id)}
       else{const i=S.lines.findIndex(l=>l.id===p.new.id);if(i>=0)S.lines[i]=p.new;else S.lines.push(p.new);S.lines.sort((a,b)=>a.pos-b.pos)}
       if(!S.editing)renderSheet();renderSplit();
+    })
+    .on("postgres_changes",{event:"*",schema:"public",table:"memos",filter:"session_id=eq."+S.sid},p=>{
+      if(p.eventType==="DELETE"){S.memos=S.memos.filter(m=>m.id!==p.old.id)}
+      else{const i=S.memos.findIndex(m=>m.id===p.new.id);if(i>=0)S.memos[i]=p.new;else S.memos.push(p.new)}
+      renderMemos();renderSplit();
     })
     .on("postgres_changes",{event:"INSERT",schema:"public",table:"writers",filter:"session_id=eq."+S.sid},p=>{if(!S.writers.find(w=>w.id===p.new.id))S.writers.push(p.new);renderWho();renderSplit()})
     .on("presence",{event:"sync"},()=>{S.online=new Set(Object.keys(S.channel.presenceState()));renderWho()})
@@ -152,7 +173,7 @@ function keepAuthors(old,nw,me){const n=old.length,m=nw.length,d=Array.from({len
 
 function renderRoom(){
   $("#app").innerHTML=`<div class="top"><div class="title"><b>${esc(S.session.title)}</b><div class="acts"><a class="wa" id="wa" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.2A8.5 8.5 0 1 1 21 11.5z"/></svg>WhatsApp</a><button class="share" id="sh">Deel link</button></div></div><div class="who" id="who"></div></div>
-  <div class="memos"><div class="lbl"><span>Memo's</span></div><div class="empty">Opnemen en een melodie kiezen komt in de volgende stap (fase 3).</div></div>
+  <div class="memos"><div class="lbl"><span>Memo's</span><button class="rec" id="rec"><i></i>Opnemen</button></div><div class="mlist" id="mlist"></div></div>
   <div class="sheet" id="sheet"></div><div class="split" id="split"></div>`;
   $("#sh").onclick=async()=>{const u=location.href;const t="Doe mee aan onze schrijfsessie: "+S.session.title;if(navigator.share){try{await navigator.share({title:t,text:t,url:u});return}catch(e){if(e&&e.name==="AbortError")return}}try{await navigator.clipboard.writeText(u);toast("Link gekopieerd. Plak hem in WhatsApp.")}catch(e){prompt("Kopieer deze link",u)}};
   const waUrl="https://wa.me/?text="+encodeURIComponent("Doe mee aan onze schrijfsessie: "+S.session.title+"\n"+location.href);
@@ -160,7 +181,43 @@ function renderRoom(){
   $("#wa").onclick=e=>{if(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))return;e.preventDefault();
     const w=window.open(waUrl,"splitvel-wa","popup=yes,width=520,height=720,left="+Math.max(0,screen.width-560)+",top=60");
     if(w){toast("WhatsApp opent in een apart venster. Sluit dat na het versturen.")}else{window.open(waUrl,"_blank")}};
-  renderWho();renderSheet();renderSplit();
+  $("#rec").onclick=toggleRec;
+  renderWho();renderMemos();renderSheet();renderSplit();
+}
+function renderMemos(){
+  const el=$("#mlist");if(!el)return;
+  if(!S.memos.length){el.innerHTML=`<div class="empty">Nog geen memo's. Tik op Opnemen en hum of zing je idee in.</div>`;return}
+  el.innerHTML=S.memos.map(m=>{const w=W(m.writer_id);return `<div class="memo" style="--c:${w.color}"><button class="play" data-id="${m.id}" aria-label="Afspelen">${S.playing===m.id?"&#10074;&#10074;":"&#9654;"}</button><div class="meta"><b>${esc(w.name)}</b> &middot; ${fmt(m.seconds)}${m.chosen?" &middot; gekozen melodie":""}</div><button class="star" data-id="${m.id}" aria-pressed="${m.chosen}">&#9733; ${m.chosen?"Gekozen":"Kies"}</button>${m.writer_id===S.me.id?`<button class="del" data-id="${m.id}" aria-label="Verwijder memo">&#10005;</button>`:"<span></span>"}</div>`}).join("");
+  const M=id=>S.memos.find(x=>x.id===id);
+  el.querySelectorAll(".play").forEach(b=>b.onclick=()=>{const m=M(b.dataset.id);if(!m)return;
+    if(S.playing===m.id){S.audio.pause();S.playing=null}else{S.audio.src=pub(m.path);S.audio.play().catch(()=>toast("Afspelen lukte niet"));S.playing=m.id}renderMemos()});
+  el.querySelectorAll(".star").forEach(b=>b.onclick=async()=>{const m=M(b.dataset.id);if(!m)return;m.chosen=!m.chosen;renderMemos();renderSplit();
+    const {error}=await sb.from("memos").update({chosen:m.chosen}).eq("id",m.id);if(error)toast("Opslaan lukte niet")});
+  el.querySelectorAll(".del").forEach(b=>b.onclick=async()=>{const m=M(b.dataset.id);if(!m||!confirm("Deze memo verwijderen?"))return;
+    if(S.playing===m.id){S.audio.pause();S.playing=null}S.memos=S.memos.filter(x=>x.id!==m.id);renderMemos();renderSplit();
+    await sb.storage.from("memos").remove([m.path]);await sb.from("memos").delete().eq("id",m.id)});
+}
+function resetRecBtn(){const b=$("#rec");if(b){b.classList.remove("on");b.lastChild.textContent="Opnemen"}}
+async function toggleRec(){
+  if(S.rec){S.rec.stop();return}
+  if(!navigator.mediaDevices||!window.MediaRecorder)return toast("Opnemen werkt niet in deze browser. Open de link in Safari of Chrome.");
+  let stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){return toast("Geen toegang tot de microfoon. Sta de microfoon toe en probeer opnieuw.")}
+  const type=["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg"].find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))||"";
+  const r=new MediaRecorder(stream,type?{mimeType:type}:undefined);const chunks=[];const t0=Date.now();
+  r.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  r.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());clearInterval(S.recTimer);S.rec=null;resetRecBtn();
+    const mime=(r.mimeType||type||"audio/webm").split(";")[0];const secs=Math.max(1,Math.round((Date.now()-t0)/1000));
+    const blob=new Blob(chunks,{type:mime});if(blob.size<500)return toast("Opname te kort.");
+    const ext=mime.includes("mp4")?"m4a":mime.includes("ogg")?"ogg":"webm";
+    const path=S.sid+"/"+(crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(36).slice(2))+"."+ext;
+    toast("Memo opslaan…");
+    const up=await sb.storage.from("memos").upload(path,blob,{contentType:mime});
+    if(up.error)return toast("Opslaan lukte niet: "+up.error.message);
+    const {data,error}=await sb.from("memos").insert({session_id:S.sid,writer_id:S.me.id,path,mime,seconds:secs}).select().single();
+    if(error)return toast("Opslaan lukte niet: "+error.message);
+    if(!S.memos.find(x=>x.id===data.id))S.memos.push(data);renderMemos();toast("Memo opgeslagen")};
+  r.start();S.rec=r;const b=$("#rec");b.classList.add("on");b.lastChild.textContent="Stop 0:00";
+  S.recTimer=setInterval(()=>{const s=Math.round((Date.now()-t0)/1000);const bb=$("#rec");if(bb)bb.lastChild.textContent="Stop "+fmt(s);if(s>=180&&S.rec)S.rec.stop()},500);
 }
 function renderWho(){const el=$("#who");if(!el)return;el.innerHTML=S.writers.map(w=>`<span class="chip ${S.online.has(w.id)?"on":""}" style="--c:${w.color}" title="${S.online.has(w.id)?"nu verbonden":"niet verbonden"}"><i></i>${esc(w.name)}${w.id===S.me.id?" (jij)":""}</span>`).join("")}
 function renderSheet(){
@@ -192,12 +249,21 @@ function renderSheet(){
 }
 function renderSplit(){
   const el=$("#split");if(!el)return;
-  const c={};let t=0;S.lines.forEach(l=>l.words.forEach(x=>{c[x.a]=(c[x.a]||0)+1;t++}));
-  const ws=S.writers;
-  el.innerHTML=`<div class="lbl"><span>Verdeling tekst</span><span>${t} woorden</span></div>
-   <div class="bar">${ws.map(w=>`<span style="width:${t?(c[w.id]||0)/t*100:0}%;background:${w.color}"></span>`).join("")}</div>
-   <div class="legend">${ws.map(w=>`<span><i style="background:${w.color}"></i>${esc(w.name)} ${t?Math.round((c[w.id]||0)/t*100):0}%</span>`).join("")}</div>
-   <span class="mono">Melodie telt mee zodra memo's erin zitten (fase 3).</span>`;
+  const r=calcSplit(S.writers,S.lines,S.memos);const ws=S.writers;
+  const bar=o=>`<div class="bar">${ws.map(w=>`<span style="width:${(o[w.id]||0)*100}%;background:${w.color}"></span>`).join("")}</div>`;
+  el.innerHTML=`<div class="lbl"><span>Verdeling</span><span>${r.words} woorden &middot; ${r.mel} melodie${r.mel===1?"":"&euml;n"}</span></div>
+   <div class="rowlbl"><span>Tekst</span>${r.words?bar(r.T):'<span class="mono">nog geen tekst</span>'}</div>
+   <div class="rowlbl"><span>Melodie</span>${r.mel?bar(r.M):'<span class="mono">nog geen melodie gekozen</span>'}</div>
+   <div class="rowlbl"><span><b>Totaal</b></span>${bar(r.Tot)}</div>
+   <div class="legend">${ws.map(w=>`<span><i style="background:${w.color}"></i>${esc(w.name)} ${Math.round((r.Tot[w.id]||0)*100)}%</span>`).join("")}</div>
+   <span class="mono">Totaal: tekst en gekozen melodie tellen elk voor de helft.</span>`;
+}
+function calcSplit(ws,lines,memos){
+  const T={},M={},Tot={};let words=0;lines.forEach(l=>l.words.forEach(x=>{T[x.a]=(T[x.a]||0)+1;words++}));
+  const ch=memos.filter(m=>m.chosen);ch.forEach(m=>{M[m.writer_id]=(M[m.writer_id]||0)+1/ch.length});
+  ws.forEach(w=>{T[w.id]=words?(T[w.id]||0)/words:0;M[w.id]=M[w.id]||0;
+    Tot[w.id]=words&&ch.length?(T[w.id]+M[w.id])/2:words?T[w.id]:M[w.id]});
+  return {T,M,Tot,words,mel:ch.length};
 }
 boot();
 </script>
