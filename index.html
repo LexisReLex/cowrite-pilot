@@ -189,13 +189,32 @@ function renderOwner(msg){
     const base=location.origin+location.pathname;
     $("#ov").innerHTML=`<div class="tiles">${[["sessies",t.sessies],["deelnemers",t.deelnemers],["regels",t.regels],["memo's",t.memos]].map(([k,v])=>`<div class="tile"><b>${v}</b><span>${k}</span></div>`).join("")}</div>
       <span class="lbl">Uitnodigingscodes</span>
-      <div class="otbl"><table><tr><th>Code</th><th>Voor</th><th>Gebruikt</th><th>Sessies</th><th>Status</th></tr>
-      ${data.codes.map(c=>`<tr><td><b>${esc(c.code)}</b></td><td>${esc(c.label||"")}</td><td>${c.uses}${c.max_uses?" / "+c.max_uses:" / onbeperkt"}</td><td>${c.sessies}</td><td>${c.active?"actief":"uit"}${c.is_owner?" &middot; eigenaar":""}</td></tr>`).join("")}</table></div>
+      <div class="otbl"><table><tr><th>Code</th><th>Voor</th><th>Gebruikt</th><th>Sessies</th><th>Status</th><th></th></tr>
+      ${data.codes.map(c=>`<tr><td><b>${esc(c.code)}</b></td><td>${esc(c.label||"")}</td><td>${c.uses}${c.max_uses?" / "+c.max_uses:" / onbeperkt"}</td><td>${c.sessies}</td><td>${c.active?"actief":"uit"}${c.is_owner?" &middot; eigenaar":""}</td><td>${c.is_owner?"":`<button class="hb" data-tg="${esc(c.code)}">${c.active?"Zet uit":"Zet aan"}</button>`}</td></tr>`).join("")}</table></div>
+      <div class="host"><span class="lbl">Nieuwe startcode maken</span>
+        <label class="lbl" for="ncl">Voor wie (bijvoorbeeld de naam van de school of docent)</label><input type="text" id="ncl" maxlength="60" placeholder="Bijvoorbeeld: Muziekschool Amersfoort">
+        <label class="lbl" for="ncm">Hoe vaak te gebruiken (leeg = onbeperkt)</label><input type="text" id="ncm" inputmode="numeric" maxlength="5" placeholder="Bijvoorbeeld: 30">
+        <button class="btn" id="ncg">Maak startcode</button><div id="ncr"></div></div>
       <span class="lbl">Sessies (laatst actief bovenaan)</span>
       <div class="otbl"><table><tr><th>Titel</th><th>Sessiecode</th><th>Status</th><th>Mensen</th><th>Woorden</th><th>Memo's</th><th>Laatst actief</th></tr>
       ${data.sessies.map(x=>`<tr><td><a href="${base}?s=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">${esc(x.title)}</a></td><td><b>${esc(x.join_code||"")}</b></td><td>${x.closed?"afgesloten":x.locked?"op slot":"open"}</td><td>${x.deelnemers}</td><td>${x.woorden}</td><td>${x.memos}</td><td>${dt(x.laatst)}</td></tr>`).join("")}</table></div>
-      <span class="mono">Bijgewerkt ${dt(new Date().toISOString())}. Druk op Toon overzicht om te verversen. Open een sessie om daar de code te vervangen, het slot te bedienen of toegang in te trekken.</span>`};
+      <span class="mono">Bijgewerkt ${dt(new Date().toISOString())}. Druk op Toon overzicht om te verversen. Open een sessie om daar de code te vervangen, het slot te bedienen of toegang in te trekken.</span>`;
+    bindCodes(code,go)};
   $("#og").onclick=go;if($("#oc").value&&!msg)ensureAuth().then(go);
+}
+function bindCodes(owner,refresh){
+  document.querySelectorAll("[data-tg]").forEach(b=>b.onclick=async()=>{const {error}=await sb.rpc("owner_code_action",{p_owner:owner,p_action:"aanuit",p_target:b.dataset.tg});if(error)return toast("Dat lukte niet: "+errTxt(error));toast("Gedaan.");refresh()});
+  const g=$("#ncg");if(!g)return;
+  g.onclick=async()=>{const label=$("#ncl").value.trim();const m=$("#ncm").value.trim();
+    if(!label)return toast("Vul in voor wie de code is.");
+    if(m&&!/^[0-9]+$/.test(m))return toast("Vul bij aantal alleen een getal in, of laat het leeg.");
+    const {data,error}=await sb.rpc("owner_code_action",{p_owner:owner,p_action:"nieuw",p_label:label,p_max:m?parseInt(m,10):null});
+    if(error)return toast("Maken lukte niet: "+errTxt(error));
+    const c=data.code;await refresh();
+    const r=$("#ncr");if(!r)return;
+    r.innerHTML=`<div class="row" style="margin-top:6px">Nieuwe startcode <span class="code">${esc(c)}</span><button class="hb" id="ncc">Kopieer</button></div><span class="mono">Geef deze code aan ${esc(label)}. Daarmee kan die een eigen sessie starten en beheren.</span>`;
+    $("#ncc").onclick=async()=>{try{await navigator.clipboard.writeText(c);toast("Startcode gekopieerd.")}catch(e){prompt("Kopieer de startcode",c)}};
+    r.scrollIntoView({behavior:"smooth",block:"center"})};
 }
 function renderStart(msg){
   $("#app").innerHTML=`<div class="pad stack">
