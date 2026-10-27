@@ -166,6 +166,7 @@ S.audio.onended=()=>{S.playing=null;renderMemos()};
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();S.installEvt=e;renderTip()});
 
 async function boot(){
+  if(/error_code=otp_expired/.test(location.hash)){history.replaceState(null,"",location.pathname+location.search);setTimeout(()=>toast("Deze link is verlopen of al gebruikt. Vraag hieronder een nieuwe aan.",5000),600)}
   if(params.has("eigenaar")) return renderOwner();
   if(!await ensureAuth()) return renderMsg("Verbinden lukte niet. Controleer je internet en open de link opnieuw.");
   if(!S.sid) return renderStart();
