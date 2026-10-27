@@ -107,6 +107,8 @@ body.dragging .dropzone{border-color:var(--cur);color:var(--ink);background:var(
 .legend span{display:flex;align-items:center;gap:5px}
 .legend i{width:10px;height:10px;border-radius:50%}
 .share{border:2px solid var(--line);background:transparent;color:var(--ink);border-radius:10px;padding:5px 10px;font:500 13px var(--body)}
+.upd{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:60;background:var(--cur);color:#fff;border:none;border-radius:12px;padding:11px 16px;font:600 14px var(--body);box-shadow:0 4px 14px rgba(0,0,0,.18);animation:updin .35s ease-out}
+@keyframes updin{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
 .toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:12px;font-size:14px;z-index:9}
 .err{color:#e03131;font-size:13px}
 .host{display:flex;flex-direction:column;gap:8px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px}
@@ -144,24 +146,34 @@ async function ensureAuth(){try{const {data}=await sb.auth.getSession();if(data&
 const errTxt=e=>String(e&&e.message||e);
 
 const mailErr=e=>{const m=errTxt(e).toLowerCase();
-  if(m.includes("rate")||m.includes("seconds"))return "Er zijn net te veel mails verstuurd. Probeer het over een uur opnieuw.";
+  if(m.includes("seconds")||m.includes("after"))return "Even wachten: je kunt één keer per minuut een mail aanvragen. Probeer het zo opnieuw.";
+  if(m.includes("rate"))return "Er zijn dit uur te veel mails verstuurd. Probeer het later opnieuw.";
   if(m.includes("already"))return "Dit e-mailadres heeft al een account. Tik op: Ik heb al een account.";
   if(m.includes("signups not allowed")||m.includes("not found")||m.includes("not allowed"))return "Bij dit e-mailadres hoort nog geen account. Tik eerst op: Bewaar met e-mail.";
+  if(m.includes("expired")||m.includes("invalid"))return "Deze code klopt niet of is verlopen. Vraag een nieuwe mail aan.";
   return "Dat lukte niet: "+errTxt(e)};
+const ACC={mail:null,type:null};
 async function renderAcc(){const el=$("#acc");if(!el)return;const {data}=await sb.auth.getUser();const u=data&&data.user;if(!u)return;
   if(u.email&&!u.is_anonymous){el.innerHTML=`<div class="host"><span class="lbl">Account</span><p style="margin:4px 0">Ingelogd als <b>${esc(u.email)}</b>. Je sessies staan bewaard bij dit e-mailadres, ook op je andere toestellen.</p><button class="hb" id="alo">Uitloggen op dit toestel</button></div>`;
     $("#alo").onclick=async()=>{if(!confirm("Uitloggen op dit toestel? Je kunt later weer inloggen met je e-mailadres."))return;await sb.auth.signOut();location.reload()};return}
-  const pend=u.new_email;
-  el.innerHTML=`<div class="host"><span class="lbl">Account</span>${pend?`<p style="margin:4px 0">We stuurden een bevestigingsmail naar <b>${esc(pend)}</b>. Tik op de link in die mail om je account af te ronden.</p>`:`<p class="muted" style="margin:4px 0">Bewaar je werk met je e-mailadres. Dan vind je je sessies terug op elk toestel.</p>`}<input type="email" id="aem" autocomplete="email" placeholder="jij@voorbeeld.nl" style="margin-top:6px"><div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="hb" id="asv">Bewaar met e-mail</button><button class="hb" id="ain">Ik heb al een account</button></div><p class="mono" id="amsg" style="margin:8px 0 0"></p></div>`;
+  const pend=u.new_email;if(pend&&!ACC.mail){ACC.mail=pend;ACC.type="email_change"}
+  const codeBox=ACC.mail?`<div style="margin-top:10px"><span class="lbl">Code uit de mail</span><p class="muted" style="margin:4px 0;font-size:13px">In de mail aan <b>${esc(ACC.mail)}</b> staat een knop en een code van 6 cijfers. Gebruik je ShareNotes vanaf het icoon op je beginscherm? Vul dan hier de code in.</p><input type="text" id="aco" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" style="margin-top:6px"><div class="row" style="gap:8px;margin-top:8px"><button class="hb" id="acg">Ga verder met code</button></div></div>`:"";
+  el.innerHTML=`<div class="host"><span class="lbl">Account</span>${pend?`<p style="margin:4px 0">We stuurden een bevestigingsmail naar <b>${esc(pend)}</b>. Tik op de knop in die mail, of vul hieronder de code in.</p>`:`<p class="muted" style="margin:4px 0">Bewaar je werk met je e-mailadres. Dan vind je je sessies terug op elk toestel.</p>`}<input type="email" id="aem" autocomplete="email" placeholder="jij@voorbeeld.nl" style="margin-top:6px" value="${esc(ACC.mail&&ACC.type==="email"?ACC.mail:"")}"><div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="hb" id="asv">Bewaar met e-mail</button><button class="hb" id="ain">Ik heb al een account</button></div>${codeBox}<p class="mono" id="amsg" style="margin:8px 0 0"></p></div>`;
   const em=()=>{const v=$("#aem").value.trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){toast("Vul een geldig e-mailadres in.");return null}return v};
   const back=location.origin+location.pathname+location.search;
-  $("#asv").onclick=async()=>{const v=em();if(!v)return;const {error}=await sb.auth.updateUser({email:v},{emailRedirectTo:back});if(error)return $("#amsg").textContent=mailErr(error);renderAcc()};
-  $("#ain").onclick=async()=>{const v=em();if(!v)return;const {error}=await sb.auth.signInWithOtp({email:v,options:{shouldCreateUser:false,emailRedirectTo:back}});$("#amsg").textContent=error?mailErr(error):"Kijk in je mail en tik op de inloglink. Open die link op dit toestel."};
+  $("#asv").onclick=async()=>{const v=em();if(!v)return;const {error}=await sb.auth.updateUser({email:v},{emailRedirectTo:back});if(error)return $("#amsg").textContent=mailErr(error);ACC.mail=v;ACC.type="email_change";renderAcc()};
+  $("#ain").onclick=async()=>{const v=em();if(!v)return;const {error}=await sb.auth.signInWithOtp({email:v,options:{shouldCreateUser:false,emailRedirectTo:back}});if(error)return $("#amsg").textContent=mailErr(error);ACC.mail=v;ACC.type="email";await renderAcc();$("#amsg").textContent="Mail verstuurd. Tik op de knop in de mail, of vul de code hierboven in."};
+  if($("#acg"))$("#acg").onclick=async()=>{const t=$("#aco").value.replace(/\D/g,"");if(t.length<6)return toast("Vul de code van 6 cijfers in.");
+    const {error}=await sb.auth.verifyOtp({email:ACC.mail,token:t,type:ACC.type});if(error)return $("#amsg").textContent=mailErr(error);toast("Gelukt.");setTimeout(()=>location.reload(),700)};
 }
 async function loadMine(){const el=$("#mys");if(!el)return;const {data,error}=await sb.rpc("my_sessions");if(error||!data||!data.length)return;
   const dt=v=>new Date(v).toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
   el.innerHTML=`<div class="host"><span class="lbl">Jouw sessies</span>${data.map(x=>`<a href="?s=${encodeURIComponent(x.id)}" style="display:block;padding:6px 0">${esc(x.title)} <span class="mono">${dt(x.created_at)}${x.closed?" · afgesloten":""}</span></a>`).join("")}</div>`}
 sb.auth.onAuthStateChange(ev=>{if(ev==="USER_UPDATED")setTimeout(()=>{renderAcc();toast("Je account is bijgewerkt.")},0)});
+const APP_V="2026-10-27-code";
+async function checkUpdate(){try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();const m=t.match(new RegExp('const APP'+'_V="([^"]+)"'));
+  if(m&&m[1]!==APP_V&&!document.querySelector(".upd")){const b=document.createElement("button");b.className="upd";b.textContent="Er is een nieuwe versie. Tik om te verversen.";b.onclick=()=>location.reload();document.body.appendChild(b)}}catch(e){}}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});setInterval(checkUpdate,300000);setTimeout(checkUpdate,5000);
 S.audio.onended=()=>{S.playing=null;renderMemos()};
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();S.installEvt=e;renderTip()});
 
