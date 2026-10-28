@@ -167,11 +167,27 @@ async function renderAcc(){const el=$("#acc");if(!el)return;const {data}=await s
   if($("#acg"))$("#acg").onclick=async()=>{const t=$("#aco").value.replace(/\D/g,"");if(t.length<6)return toast("Vul de hele code uit de mail in.");
     const {error}=await sb.auth.verifyOtp({email:ACC.mail,token:t,type:ACC.type});if(error)return $("#amsg").textContent=mailErr(error);try{localStorage.removeItem("sharenotes:acc")}catch(e){}toast("Gelukt.");setTimeout(()=>location.reload(),700)};
 }
+async function isAccount(){try{const {data}=await sb.auth.getUser();const u=data&&data.user;return !!(u&&u.email&&!u.is_anonymous)}catch(e){return false}}
+const isApp=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+function loginBox(el,kop,uitleg,nieuw){if(!el)return;
+  const toon=()=>{const metCode=ACC.mail&&ACC.type==="email";
+    el.innerHTML=`<div class="host"><span class="lbl">${esc(kop)}</span><p class="muted" style="margin:4px 0">${uitleg}</p>${metCode?`<p style="margin:4px 0">De code staat in het onderwerp van de mail aan <b>${esc(ACC.mail)}</b>.</p><input type="text" id="lco" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Code uit de mail" style="margin-top:6px"><button class="btn" id="lcg" style="margin-top:8px">Inloggen</button><button class="hb" id="lan" style="margin-top:8px">Andere mail of nieuwe code</button>`:`<input type="email" id="lem" autocomplete="email" placeholder="jij@voorbeeld.nl" style="margin-top:6px" value="${esc(store.get("sharenotes:mail")||"")}"><button class="btn" id="lsd" style="margin-top:8px">Stuur mij een inlogcode</button>`}<p class="mono" id="lmsg" style="margin:8px 0 0"></p></div>`;
+    const fout=e=>{const m=errTxt(e).toLowerCase();return (m.includes("signups not allowed")||m.includes("not found")||m.includes("not allowed"))?nieuw:mailErr(e)};
+    if(metCode){const inp=$("#lco");let vorige=0;
+      const ga=async()=>{const t=inp.value.replace(/\D/g,"");if(t.length<6)return toast("Vul de hele code uit de mail in.");$("#lcg").disabled=true;const {error}=await sb.auth.verifyOtp({email:ACC.mail,token:t,type:"email"});$("#lcg").disabled=false;if(error)return $("#lmsg").textContent=fout(error);try{localStorage.removeItem("sharenotes:acc")}catch(e){}toast("Gelukt.");setTimeout(()=>location.reload(),500)};
+      $("#lcg").onclick=ga;inp.onkeydown=e=>{if(e.key==="Enter")ga()};
+      inp.oninput=()=>{const n=inp.value.replace(/\D/g,"").length;if(n===8||(n>=6&&n-vorige>1))ga();vorige=n};
+      $("#lan").onclick=()=>{ACC.mail=null;ACC.type=null;try{localStorage.removeItem("sharenotes:acc")}catch(e){}toon()};
+    }else $("#lsd").onclick=async()=>{const v=$("#lem").value.trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v))return toast("Vul een geldig e-mailadres in.");
+      const {error}=await sb.auth.signInWithOtp({email:v,options:{shouldCreateUser:false,emailRedirectTo:location.origin+location.pathname+location.search}});
+      const wacht=error&&/seconds|after/i.test(errTxt(error));if(error&&!wacht)return $("#lmsg").textContent=fout(error);
+      store.set("sharenotes:mail",v);ACC.mail=v;ACC.type="email";saveAcc();toon();$("#lmsg").textContent=wacht?"Er is net al een code gestuurd. Gebruik de nieuwste mail.":"Gestuurd. Open je mail en vul de code in."};
+  };toon()}
 async function loadMine(){const el=$("#mys");if(!el)return;const {data,error}=await sb.rpc("my_sessions");if(error||!data||!data.length)return;
   const dt=v=>new Date(v).toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
   el.innerHTML=`<div class="host"><span class="lbl">Jouw sessies</span>${data.map(x=>`<a href="?s=${encodeURIComponent(x.id)}" style="display:block;padding:6px 0">${esc(x.title)} <span class="mono">${dt(x.created_at)}${x.closed?" · afgesloten":""}</span></a>`).join("")}</div>`}
 sb.auth.onAuthStateChange(ev=>{if(ev==="USER_UPDATED")setTimeout(()=>{renderAcc();toast("Je account is bijgewerkt.")},0)});
-const APP_V="2026-10-27-code5";
+const APP_V="2026-10-28-inlog1";
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();const m=t.match(new RegExp('const APP'+'_V="([^"]+)"'));
   if(m&&m[1]!==APP_V&&!document.querySelector(".upd")){const b=document.createElement("button");b.className="upd";b.textContent="Er is een nieuwe versie. Tik om te verversen.";b.onclick=()=>{const u=new URL(location.href);u.searchParams.set("v",Date.now());location.replace(u.toString())};document.body.appendChild(b)}}catch(e){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});setInterval(checkUpdate,300000);setTimeout(checkUpdate,5000);
@@ -203,7 +219,9 @@ async function tryJoin(code){
 }
 function renderCode(msg){
   $("#app").innerHTML=`<div class="pad stack">
-    <span class="mono">ShareNotes</span><h1>Sessiecode</h1>
+    <span class="mono">ShareNotes</span><h1>Naar binnen</h1>
+    <div id="lgn"></div>
+    <span class="lbl" style="margin-top:6px">Nieuw in deze sessie? Vul de sessiecode in</span>
     <p class="muted" style="margin:0">Deze schrijfsessie is beveiligd. Vul de sessiecode in die je kreeg van wie de sessie startte. Dit hoeft maar één keer per telefoon.</p>
     <label class="lbl" for="sc">Sessiecode</label>
     <input type="text" id="sc" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="Bijvoorbeeld: K7RM2Q">
@@ -211,6 +229,7 @@ function renderCode(msg){
     <button class="btn" id="sg">Naar binnen</button></div>`;
   const go=()=>{const c=$("#sc").value.trim().toUpperCase();if(c)tryJoin(c)};
   $("#sg").onclick=go;$("#sc").onkeydown=e=>{if(e.key==="Enter")go()};
+  isAccount().then(a=>{if(!a)loginBox($("#lgn"),"Heb je al een account?","Log in met je e-mailadres. Doe je al mee in deze sessie, dan heb je geen sessiecode nodig.","Bij dit e-mailadres hoort nog geen account. Vul hieronder de sessiecode in; daarna kun je je werk bewaren met je e-mailadres.")});
 }
 async function loadWriters(){const {data}=await sb.from("writers").select("*").eq("session_id",S.sid).order("created_at");S.writers=(data||[]).map(withC)}
 async function loadLines(){const {data}=await sb.from("lines").select("*").eq("session_id",S.sid).order("pos");S.lines=data||[]}
@@ -272,6 +291,7 @@ function renderStart(msg){
   $("#app").innerHTML=`<div class="pad stack">
     <span class="mono">ShareNotes · pilot · gemaakt door Lex de Groot</span>
     <h1>Samen schrijven, in kleur</h1>
+    <div id="lgn"></div>
     <p class="muted" style="margin:0">Start een schrijfsessie en deel de link. Iedereen schrijft in een eigen kleur, onderin zie je wie wat bijdroeg.</p>
     ${msg?`<p class="err">${esc(msg)}</p>`:""}
     <label class="lbl" for="t">Titel van het nummer</label>
@@ -281,6 +301,7 @@ function renderStart(msg){
     <p class="muted" style="margin:0;font-size:13px">ShareNotes is in testfase. Een nieuwe sessie starten kan alleen met een uitnodigingscode. Meedoen aan een bestaande sessie gaat via de link plus de sessiecode die je krijgt.</p>
     <button class="btn" id="go">Start schrijfsessie</button><div id="mys"></div><div id="acc"></div></div>`;
   loadMine();renderAcc();
+  if(isApp())isAccount().then(a=>{if(!a)loginBox($("#lgn"),"Welkom terug","Log in met je e-mailadres. Daarna staan je sessies hieronder klaar.","Bij dit e-mailadres hoort nog geen account. Open de link van je sessie en vul de sessiecode in; daarna kun je je werk bewaren met je e-mailadres.")});
   $("#go").onclick=async()=>{
     const title=$("#t").value.trim()||"Nieuw nummer";
     const code=$("#c").value.trim().toUpperCase();
@@ -311,8 +332,9 @@ function renderJoin(){
     $("#cy").onclick=async()=>{const link=$("#lk")?$("#lk").value.trim().toUpperCase():null;
       const {error}=await sb.rpc("claim_writer",{p_sid:S.sid,p_writer:w.id,p_link:link});
       if(error){if(errTxt(error).includes("KOPPELCODE")){
-        $("#cf").innerHTML=`<p style="margin:4px 0"><b style="color:${w.color}">${esc(w.name)}</b> gebruikt ShareNotes al op een ander toestel. Open daar de sessie en tik onderaan op <b>Koppelcode voor ander toestel</b>. Vul die code hier in.</p><input type="text" id="lk" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="Koppelcode"><button class="btn" id="cy" style="background:${w.color}">Koppel en ga verder als ${esc(w.name)}</button>${link?'<p class="err">Deze koppelcode klopt niet.</p>':""}`;
-        $("#cy").onclick=()=>claimGo(w);return}
+        $("#cf").innerHTML=`<p style="margin:4px 0"><b style="color:${w.color}">${esc(w.name)}</b> gebruikt ShareNotes al op een ander toestel. </p><div id="lgk"></div><p class="muted" style="margin:8px 0 4px">Geen account? Open de sessie op je andere toestel en tik onderaan op <b>Koppelcode voor ander toestel</b>. Vul die code hier in.</p><input type="text" id="lk" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="Koppelcode"><button class="btn" id="cy" style="background:${w.color}">Koppel en ga verder als ${esc(w.name)}</button>${link?'<p class="err">Deze koppelcode klopt niet.</p>':""}`;
+        $("#cy").onclick=()=>claimGo(w);
+        isAccount().then(a=>{if(!a)loginBox($("#lgk"),"Heb je een account?","Log in met je e-mailadres, dan is geen koppelcode nodig.","Bij dit e-mailadres hoort nog geen account. Gebruik de koppelcode hieronder.")});return}
         return toast(errTxt(error).includes("INGETROKKEN")?"Deze naam heeft geen toegang meer tot deze sessie.":"Dat lukte niet: "+errTxt(error),5000)}
       store.set("splitvel:"+S.sid,w.id);S.me=w;enterRoom()}};
   const claimGo=async w=>{const link=$("#lk").value.trim().toUpperCase();if(!link)return;const {error}=await sb.rpc("claim_writer",{p_sid:S.sid,p_writer:w.id,p_link:link});
