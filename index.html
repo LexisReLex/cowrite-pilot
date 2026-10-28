@@ -190,7 +190,7 @@ async function loadMine(){const el=$("#mys");if(!el)return;const {data,error}=aw
   const dt=v=>new Date(v).toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
   el.innerHTML=`<div class="host"><span class="lbl">Jouw sessies</span>${data.map(x=>`<a href="?s=${encodeURIComponent(x.id)}" style="display:block;padding:6px 0">${esc(x.title)} <span class="mono">${dt(x.created_at)}${x.closed?" · afgesloten":""}</span></a>`).join("")}</div>`}
 sb.auth.onAuthStateChange(ev=>{if(ev==="USER_UPDATED")setTimeout(()=>{renderAcc();toast("Je account is bijgewerkt.")},0)});
-const APP_V="2026-10-28-acc1";
+const APP_V="2026-10-28-memo1";
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();const m=t.match(new RegExp('const APP'+'_V="([^"]+)"'));
   if(m&&m[1]!==APP_V&&!document.querySelector(".upd")){const b=document.createElement("button");b.className="upd";b.textContent="Er is een nieuwe versie. Tik om te verversen.";b.onclick=()=>{const u=new URL(location.href);u.searchParams.set("v",Date.now());location.replace(u.toString())};document.body.appendChild(b)}}catch(e){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});setInterval(checkUpdate,300000);setTimeout(checkUpdate,5000);
@@ -298,7 +298,7 @@ function renderStart(msg){
     <div id="lgn"></div>
     <p class="muted" style="margin:0">Start een schrijfsessie en deel de link. Iedereen schrijft in een eigen kleur, onderin zie je wie wat bijdroeg.</p>
     ${msg?`<p class="err">${esc(msg)}</p>`:""}
-    <label class="lbl" for="t">Titel van het nummer</label>
+    <label class="lbl" for="t">Titel van de song</label>
     <input type="text" id="t" placeholder="Bijvoorbeeld: Nachtbus" maxlength="60">
     <label class="lbl" for="c">Uitnodigingscode</label>
     <input type="text" id="c" placeholder="Bijvoorbeeld: TEST-ABC123" maxlength="20" autocapitalize="characters" autocomplete="off" value="${esc(store.get("sharenotes:code")||"")}">
@@ -307,7 +307,7 @@ function renderStart(msg){
   loadMine();renderAcc();
   if(isApp())isAccount().then(a=>{if(!a){const ac=$("#acc");if(ac)ac.hidden=true}if(!a)loginBox($("#lgn"),"Welkom terug","Log in met je e-mailadres. Daarna staan je sessies hieronder klaar.","Bij dit e-mailadres hoort nog geen account. Open de link van je sessie en vul de sessiecode in; daarna kun je je werk bewaren met je e-mailadres.")});
   $("#go").onclick=async()=>{
-    const title=$("#t").value.trim()||"Nieuw nummer";
+    const title=$("#t").value.trim()||"Nieuwe song";
     const code=$("#c").value.trim().toUpperCase();
     if(!code) return toast("Vul je uitnodigingscode in.");
     const {data,error}=await sb.rpc("create_session",{p_code:code,p_title:title});
@@ -496,11 +496,11 @@ async function makePdf(z){
   y+=6;need(18);d.setFontSize(8.5);d.setTextColor(100);d.text("HANDTEKENINGEN",M,y);y+=10;
   Z.schrijvers.filter(w=>w.totaal>0).forEach(w=>{need(16);d.setTextColor(24,23,28);d.setFontSize(10.5);d.text(w.name+"  ("+nl(w.totaal)+"%)",M,y);d.setDrawColor(150);d.line(M+62,y,M+128,y);d.line(M+136,y,W-M,y);d.setFontSize(7.5);d.setTextColor(120);d.text("handtekening",M+62,y+4);d.text("datum",M+136,y+4);y+=14});
   const n=d.getNumberOfPages();for(let i=1;i<=n;i++){d.setPage(i);d.setFontSize(7.5);d.setTextColor(130);d.text(d.splitTextToSize("ShareNotes legt vast wie wat schreef en rekent een verdeling voor. Dit document is een hulpmiddel en bewijs bij jullie afspraak, geen juridisch advies. Pagina "+i+" van "+n+".",W-2*M),M,288)}
-  d.save("ShareNotes verdeling - "+(Z.title||"nummer").replace(/[\\/:*?"<>|]/g,"")+".pdf");
+  d.save("ShareNotes verdeling - "+(Z.title||"song").replace(/[\\/:*?"<>|]/g,"")+".pdf");
 }
 function renderMemos(){
   const el=$("#mlist");if(!el)return;
-  if(!S.memos.length){el.innerHTML=`<div class="empty">Nog geen memo's. Tik op Opnemen en hum of zing je idee in.</div>`;return}
+  if(!S.memos.length){el.innerHTML=`<div class="empty">Nog geen memo's. Neem je melodie op, gezongen of gespeeld, of upload een bestand.</div>`;return}
   el.innerHTML=S.memos.map(m=>{const w=W(m.writer_id);return `<div class="memo" style="--c:${w.color}"><button class="play" data-id="${m.id}" aria-label="Afspelen">${S.playing===m.id?"&#10074;&#10074;":"&#9654;"}</button><div class="meta"><b>${esc(w.name)}</b> &middot; ${fmt(m.seconds)}${m.chosen?" &middot; gekozen melodie":""}</div><button class="star" data-id="${m.id}" aria-pressed="${m.chosen}">&#9733; ${m.chosen?"Gekozen":"Kies"}</button>${m.writer_id===S.me.id?`<button class="del" data-id="${m.id}" aria-label="Verwijder memo">&#10005;</button>`:"<span></span>"}</div>`}).join("");
   const M=id=>S.memos.find(x=>x.id===id);
   el.querySelectorAll(".play").forEach(b=>b.onclick=()=>{const m=M(b.dataset.id);if(!m)return;
