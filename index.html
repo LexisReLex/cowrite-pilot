@@ -174,20 +174,21 @@ function loginBox(el,kop,uitleg,nieuw){if(!el)return;
     el.innerHTML=`<div class="host"><span class="lbl">${esc(kop)}</span><p class="muted" style="margin:4px 0">${uitleg}</p>${metCode?`<p style="margin:4px 0">De code staat in het onderwerp van de mail aan <b>${esc(ACC.mail)}</b>.</p><input type="text" id="lco" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Code uit de mail" style="margin-top:6px"><button class="btn" id="lcg" style="margin-top:8px">Inloggen</button><button class="hb" id="lan" style="margin-top:8px">Andere mail of nieuwe code</button>`:`<input type="email" id="lem" autocomplete="email" placeholder="jij@voorbeeld.nl" style="margin-top:6px" value="${esc(store.get("sharenotes:mail")||"")}"><button class="btn" id="lsd" style="margin-top:8px">Stuur mij een inlogcode</button>`}<p class="mono" id="lmsg" style="margin:8px 0 0"></p></div>`;
     const fout=e=>{const m=errTxt(e).toLowerCase();return (m.includes("signups not allowed")||m.includes("not found")||m.includes("not allowed"))?nieuw:mailErr(e)};
     if(metCode){const inp=$("#lco");let vorige=0;
-      const ga=async()=>{const t=inp.value.replace(/\D/g,"");if(t.length<6)return toast("Vul de hele code uit de mail in.");$("#lcg").disabled=true;const {error}=await sb.auth.verifyOtp({email:ACC.mail,token:t,type:"email"});$("#lcg").disabled=false;if(error)return $("#lmsg").textContent=fout(error);try{localStorage.removeItem("sharenotes:acc")}catch(e){}toast("Gelukt.");setTimeout(()=>location.reload(),500)};
+      const ga=async()=>{const t=inp.value.replace(/\D/g,"");if(t.length<6)return toast("Vul de hele code uit de mail in.");$("#lcg").disabled=true;const {error}=await sb.auth.verifyOtp({email:ACC.mail,token:t,type:"email"});$("#lcg").disabled=false;if(error)return $("#lmsg").textContent=fout(error);try{localStorage.removeItem("sharenotes:acc")}catch(e){}store.set("sharenotes:nalogin","1");toast("Gelukt.");setTimeout(()=>location.reload(),500)};
       $("#lcg").onclick=ga;inp.onkeydown=e=>{if(e.key==="Enter")ga()};
-      inp.oninput=()=>{const n=inp.value.replace(/\D/g,"").length;if(n===8||(n>=6&&n-vorige>1))ga();vorige=n};
+      inp.oninput=()=>{const n=inp.value.replace(/\D/g,"").length;if(n>=6&&vorige<6)ga();vorige=n};
       $("#lan").onclick=()=>{ACC.mail=null;ACC.type=null;try{localStorage.removeItem("sharenotes:acc")}catch(e){}toon()};
     }else $("#lsd").onclick=async()=>{const v=$("#lem").value.trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v))return toast("Vul een geldig e-mailadres in.");
       const {error}=await sb.auth.signInWithOtp({email:v,options:{shouldCreateUser:false,emailRedirectTo:location.origin+location.pathname+location.search}});
       const wacht=error&&/seconds|after/i.test(errTxt(error));if(error&&!wacht)return $("#lmsg").textContent=fout(error);
-      store.set("sharenotes:mail",v);ACC.mail=v;ACC.type="email";saveAcc();toon();$("#lmsg").textContent=wacht?"Er is net al een code gestuurd. Gebruik de nieuwste mail.":"Gestuurd. Open je mail en vul de code in."};
+      store.set("sharenotes:mail",v);ACC.mail=v;ACC.type="email";saveAcc();toon();$("#lmsg").textContent=wacht?"Er is net al een code gestuurd. Gebruik de nieuwste mail.":"Gestuurd. De code staat in de melding bovenaan je scherm en in het onderwerp van de mail."};
   };toon()}
-async function loadMine(){const el=$("#mys");if(!el)return;const {data,error}=await sb.rpc("my_sessions");if(error||!data||!data.length)return;
+async function loadMine(){const el=$("#mys");if(!el)return;const {data,error}=await sb.rpc("my_sessions");const na=store.get("sharenotes:nalogin")==="1";if(na)try{localStorage.removeItem("sharenotes:nalogin")}catch(e){}if(error||!data||!data.length)return;
+  const open=data.filter(x=>!x.closed);if(na&&!S.sid&&open.length===1){location.search="?s="+encodeURIComponent(open[0].id);return}
   const dt=v=>new Date(v).toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
   el.innerHTML=`<div class="host"><span class="lbl">Jouw sessies</span>${data.map(x=>`<a href="?s=${encodeURIComponent(x.id)}" style="display:block;padding:6px 0">${esc(x.title)} <span class="mono">${dt(x.created_at)}${x.closed?" · afgesloten":""}</span></a>`).join("")}</div>`}
 sb.auth.onAuthStateChange(ev=>{if(ev==="USER_UPDATED")setTimeout(()=>{renderAcc();toast("Je account is bijgewerkt.")},0)});
-const APP_V="2026-10-28-inlog1";
+const APP_V="2026-10-28-inlog2";
 async function checkUpdate(){try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();const m=t.match(new RegExp('const APP'+'_V="([^"]+)"'));
   if(m&&m[1]!==APP_V&&!document.querySelector(".upd")){const b=document.createElement("button");b.className="upd";b.textContent="Er is een nieuwe versie. Tik om te verversen.";b.onclick=()=>{const u=new URL(location.href);u.searchParams.set("v",Date.now());location.replace(u.toString())};document.body.appendChild(b)}}catch(e){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});setInterval(checkUpdate,300000);setTimeout(checkUpdate,5000);
@@ -301,7 +302,7 @@ function renderStart(msg){
     <p class="muted" style="margin:0;font-size:13px">ShareNotes is in testfase. Een nieuwe sessie starten kan alleen met een uitnodigingscode. Meedoen aan een bestaande sessie gaat via de link plus de sessiecode die je krijgt.</p>
     <button class="btn" id="go">Start schrijfsessie</button><div id="mys"></div><div id="acc"></div></div>`;
   loadMine();renderAcc();
-  if(isApp())isAccount().then(a=>{if(!a)loginBox($("#lgn"),"Welkom terug","Log in met je e-mailadres. Daarna staan je sessies hieronder klaar.","Bij dit e-mailadres hoort nog geen account. Open de link van je sessie en vul de sessiecode in; daarna kun je je werk bewaren met je e-mailadres.")});
+  if(isApp())isAccount().then(a=>{if(!a){const ac=$("#acc");if(ac)ac.hidden=true}if(!a)loginBox($("#lgn"),"Welkom terug","Log in met je e-mailadres. Daarna staan je sessies hieronder klaar.","Bij dit e-mailadres hoort nog geen account. Open de link van je sessie en vul de sessiecode in; daarna kun je je werk bewaren met je e-mailadres.")});
   $("#go").onclick=async()=>{
     const title=$("#t").value.trim()||"Nieuw nummer";
     const code=$("#c").value.trim().toUpperCase();
